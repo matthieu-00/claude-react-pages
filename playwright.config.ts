@@ -8,15 +8,17 @@ export default defineConfig({
   workers: process.env.CI ? 2 : undefined,
   reporter: [['html', { open: 'never' }]],
   use: {
-    baseURL: 'http://127.0.0.1:5173/pst-toolings/',
+    // Use a dedicated port for E2E to avoid conflicts with an already-running dev server.
+    baseURL: 'http://localhost:5174/pst-toolings/',
     trace: 'retain-on-failure',
     screenshot: 'only-on-failure',
     video: 'retain-on-failure',
     colorScheme: 'light',
   },
   webServer: {
-    command: 'npm run dev -- --port 5173',
-    url: 'http://127.0.0.1:5173/pst-toolings/',
+    // --force avoids "Outdated Optimize Dep" (504) flakiness during test startup.
+    command: 'npm run dev -- --port 5174 --strictPort --force',
+    url: 'http://localhost:5174/pst-toolings/',
     reuseExistingServer: true,
     timeout: 120_000,
   },

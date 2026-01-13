@@ -472,6 +472,7 @@ ${statistics.mostChangedColumns.map((col, i) => `${i + 1}. ${col.name}: ${col.co
               <Input 
                 type="file" 
                 accept=".csv,.xlsx,.xls"
+                data-testid="spreadsheet1-file"
                 onChange={(e: React.ChangeEvent<HTMLInputElement>) => {
                   const files = e.target.files;
                   if (files && files[0]) {
@@ -496,6 +497,7 @@ ${statistics.mostChangedColumns.map((col, i) => `${i + 1}. ${col.name}: ${col.co
               <Input 
                 type="file" 
                 accept=".csv,.xlsx,.xls"
+                data-testid="spreadsheet2-file"
                 onChange={(e: React.ChangeEvent<HTMLInputElement>) => {
                   const files = e.target.files;
                   if (files && files[0]) {
