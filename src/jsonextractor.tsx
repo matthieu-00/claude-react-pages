@@ -43,7 +43,7 @@ export default function JsonExtractor() {
   // JE-EW-01, JE-EW-02, JE-EW-03, JE-EW-05: New state for easy wins
   const [sortColumn, setSortColumn] = useState<string | null>(null);
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('asc');
-  const [rowFilters, setRowFilters] = useState<Record<string, { type: 'contains' | 'exact' | 'range'; value: string; min?: number; max?: number }>>({});
+  const [rowFilters, _setRowFilters] = useState<Record<string, { type: 'contains' | 'exact' | 'range'; value: string; min?: number; max?: number }>>({});
   const [expandedCells, setExpandedCells] = useState<Set<string>>(new Set());
   const [copiedField, setCopiedField] = useState<string | null>(null);
   const [showStats, setShowStats] = useState(true);

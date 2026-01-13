@@ -24,11 +24,10 @@ export default function SpreadsheetComparator() {
   const [selectedExportColumns, setSelectedExportColumns] = useState<string[]>([]);
   
   // SD-EW-01, SD-EW-02, SD-EW-03, SD-EW-05: New state for easy wins
-  const [viewMode, setViewMode] = useState<'column' | 'sidebyside'>('column');
   const [filterType, setFilterType] = useState<'all' | 'added' | 'removed' | 'changed'>('all');
   const [diffThreshold, setDiffThreshold] = useState<number>(0);
-  const [showOnlyDiffs, setShowOnlyDiffs] = useState(false);
-  const [ignoredColumns, setIgnoredColumns] = useState<Set<string>>(new Set());
+  const [showOnlyDiffs, _setShowOnlyDiffs] = useState(false);
+  const [ignoredColumns, _setIgnoredColumns] = useState<Set<string>>(new Set());
   const [showStats, setShowStats] = useState(true);
 
   const getExcelColumnLetter = (index: number): string => {
@@ -205,9 +204,6 @@ export default function SpreadsheetComparator() {
     });
   }, [data1, data2, allHeaders, headers1, headers2, colLetters1, colLetters2]);
 
-  const sortedColumns = useMemo(() => {
-    return [...columnComparisons].sort((a, b) => b.diffCount - a.diffCount);
-  }, [columnComparisons]);
 
   // SD-EW-02: Filter Differences (must be before displayedColumns)
   const filteredColumnComparisons = useMemo(() => {
