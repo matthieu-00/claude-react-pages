@@ -1,30 +1,47 @@
-import React, { useState, useMemo, useRef, useEffect } from 'react';
-import { Upload, Download, Search, X, CheckSquare, Square, Filter, HelpCircle, ChevronDown, ChevronRight, RefreshCw, Database } from 'lucide-react';
+import { useState, useMemo, useEffect } from 'react';
+import { Upload, Download, Search, X, CheckSquare, Square, Filter, ChevronDown, ChevronRight, RefreshCw, Database } from 'lucide-react';
 import { useTheme } from '@/contexts/ThemeContext';
 import { PageContainer } from '@/components/ui/page-container';
 import { PageHeader } from '@/components/ui/page-header';
-import { Input, Textarea } from '@/components/ui/input';
+import { Textarea } from '@/components/ui/input';
 import { HelpTooltip } from '@/components/ui/help-tooltip';
+
+type JsonValue = string | number | boolean | null | JsonObject | JsonValue[];
+interface JsonObject extends Record<string, JsonValue> {}
+
+interface ComparisonField {
+  inA: boolean;
+  inB: boolean;
+  countA: number;
+  countB: number;
+  typesA: string[];
+  typesB: string[];
+  samplesA: JsonValue[];
+  samplesB: JsonValue[];
+  status: string;
+  typeMismatch: boolean;
+  valuesDiffer: boolean;
+}
 
 export default function JsonExtractor() {
   const { theme } = useTheme();
-  const [mode, setMode] = useState('extract'); // 'extract' or 'compare'
-  const [jsonData, setJsonData] = useState([]);
-  const [jsonDataB, setJsonDataB] = useState([]);
-  const [allKeys, setAllKeys] = useState([]);
-  const [allKeysB, setAllKeysB] = useState([]);
-  const [selectedKeys, setSelectedKeys] = useState(new Set());
+  const [mode, setMode] = useState<'extract' | 'compare'>('extract');
+  const [jsonData, setJsonData] = useState<JsonObject[]>([]);
+  const [jsonDataB, setJsonDataB] = useState<JsonObject[]>([]);
+  const [allKeys, setAllKeys] = useState<string[]>([]);
+  const [allKeysB, setAllKeysB] = useState<string[]>([]);
+  const [selectedKeys, setSelectedKeys] = useState<Set<string>>(new Set());
   const [searchTerm, setSearchTerm] = useState('');
   const [error, setError] = useState('');
   const [errorB, setErrorB] = useState('');
   const [hideEmpty, setHideEmpty] = useState(false);
-  const [collapsedGroups, setCollapsedGroups] = useState(new Set());
+  const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(new Set());
   const [previewCount, setPreviewCount] = useState(3);
-  const [exportMode, setExportMode] = useState('all'); // 'all', 'common', 'differences'
+  const [exportMode, setExportMode] = useState<'all' | 'common' | 'differences'>('all');
 
-  const parseConsoleFormat = (text) => {
-    const lines = text.split('\n').map(line => line.trim()).filter(line => line);
-    const obj = {};
+  const parseConsoleFormat = (text: string): JsonObject => {
+    const lines = text.split('\n').map((line: string) => line.trim()).filter((line: string) => line);
+    const obj: JsonObject = {} as JsonObject;
     
     let i = 0;
     while (i < lines.length) {
@@ -34,31 +51,36 @@ export default function JsonExtractor() {
         let key = currentLine.replace(/^\*+/, '').trim().replace(/^["']|["']$/g, '');
         
         if (i + 2 < lines.length) {
-          let value = lines[i + 2].trim();
+          let valueStr = lines[i + 2].trim();
+          let value: JsonValue;
           
-          if (value === '""' || value === "''") {
+          if (valueStr === '""' || valueStr === "''") {
             value = '';
-          } else if (value.startsWith('(') && value.includes('[')) {
-            const match = value.match(/\[(.+)\]/);
+          } else if (valueStr.startsWith('(') && valueStr.includes('[')) {
+            const match = valueStr.match(/\[(.+)\]/);
             if (match) {
               try {
-                value = JSON.parse('[' + match[1] + ']');
+                value = JSON.parse('[' + match[1] + ']') as JsonValue;
               } catch {
                 value = match[1];
               }
+            } else {
+              value = valueStr;
             }
-          } else if (value.startsWith('{') && value.endsWith('}')) {
-            value = value;
-          } else if (value === 'null') {
+          } else if (valueStr.startsWith('{') && valueStr.endsWith('}')) {
+            value = valueStr;
+          } else if (valueStr === 'null') {
             value = null;
-          } else if (value === 'true') {
+          } else if (valueStr === 'true') {
             value = true;
-          } else if (value === 'false') {
+          } else if (valueStr === 'false') {
             value = false;
-          } else if (value.startsWith('"') && value.endsWith('"')) {
-            value = value.slice(1, -1);
-          } else if (!isNaN(value) && value !== '') {
-            value = Number(value);
+          } else if (valueStr.startsWith('"') && valueStr.endsWith('"')) {
+            value = valueStr.slice(1, -1);
+          } else if (!isNaN(Number(valueStr)) && valueStr !== '') {
+            value = Number(valueStr);
+          } else {
+            value = valueStr;
           }
           
           if (key) {
@@ -73,23 +95,26 @@ export default function JsonExtractor() {
       const colonIndex = currentLine.indexOf(':');
       if (colonIndex !== -1) {
         let key = currentLine.substring(0, colonIndex).trim();
-        let value = currentLine.substring(colonIndex + 1).trim();
+        let valueStr = currentLine.substring(colonIndex + 1).trim();
         
         key = key.replace(/^\*+/, '').trim().replace(/^["']|["']$/g, '');
         
         if (key) {
-          if (value === '""' || value === "''") {
+          let value: JsonValue;
+          if (valueStr === '""' || valueStr === "''") {
             value = '';
-          } else if (value === 'null') {
+          } else if (valueStr === 'null') {
             value = null;
-          } else if (value === 'true') {
+          } else if (valueStr === 'true') {
             value = true;
-          } else if (value === 'false') {
+          } else if (valueStr === 'false') {
             value = false;
-          } else if (value.startsWith('"') && value.endsWith('"')) {
-            value = value.slice(1, -1);
-          } else if (!isNaN(value) && value !== '') {
-            value = Number(value);
+          } else if (valueStr.startsWith('"') && valueStr.endsWith('"')) {
+            value = valueStr.slice(1, -1);
+          } else if (!isNaN(Number(valueStr)) && valueStr !== '') {
+            value = Number(valueStr);
+          } else {
+            value = valueStr;
           }
           
           obj[key] = value;
@@ -102,7 +127,7 @@ export default function JsonExtractor() {
     return obj;
   };
 
-  const handlePaste = (e, isDatasetB = false) => {
+  const handlePaste = (e: React.ChangeEvent<HTMLTextAreaElement>, isDatasetB = false) => {
     const text = e.target.value;
     const setData = isDatasetB ? setJsonDataB : setJsonData;
     const setKeys = isDatasetB ? setAllKeysB : setAllKeys;
@@ -160,9 +185,9 @@ export default function JsonExtractor() {
         return;
       }
       
-      const sortedKeys = Array.from(keySet).sort();
+      const sortedKeys = Array.from(keySet as Set<string>).sort() as string[];
       
-      setData(dataArray);
+      setData(dataArray as JsonObject[]);
       setKeys(sortedKeys);
       
       if (mode === 'extract' && !isDatasetB) {
@@ -176,30 +201,30 @@ export default function JsonExtractor() {
   };
 
   // Comparison field analysis
-  const comparisonAnalysis = useMemo(() => {
+  const comparisonAnalysis = useMemo<Record<string, ComparisonField> | null>(() => {
     if (mode !== 'compare') return null;
 
     const keysA = new Set(allKeys);
     const keysB = new Set(allKeysB);
     const allUniqueKeys = new Set([...allKeys, ...allKeysB]);
     
-    const analysis = {};
+    const analysis: Record<string, ComparisonField> = {};
     
-    allUniqueKeys.forEach(key => {
+    allUniqueKeys.forEach((key: string) => {
       const inA = keysA.has(key);
       const inB = keysB.has(key);
       
       let countA = 0;
       let countB = 0;
-      const typesA = new Set();
-      const typesB = new Set();
-      const samplesA = [];
-      const samplesB = [];
-      const valuesA = new Set();
-      const valuesB = new Set();
+      const typesA = new Set<string>();
+      const typesB = new Set<string>();
+      const samplesA: JsonValue[] = [];
+      const samplesB: JsonValue[] = [];
+      const valuesA = new Set<string>();
+      const valuesB = new Set<string>();
       
       if (inA) {
-        jsonData.forEach(item => {
+        jsonData.forEach((item: JsonObject) => {
           if (key in item && item[key] !== '' && item[key] !== null && item[key] !== undefined) {
             countA++;
             typesA.add(typeof item[key]);
@@ -213,7 +238,7 @@ export default function JsonExtractor() {
       }
       
       if (inB) {
-        jsonDataB.forEach(item => {
+        jsonDataB.forEach((item: JsonObject) => {
           if (key in item && item[key] !== '' && item[key] !== null && item[key] !== undefined) {
             countB++;
             typesB.add(typeof item[key]);
@@ -228,7 +253,7 @@ export default function JsonExtractor() {
       
       // Check if values differ between datasets
       const valuesDiffer = inA && inB && valuesA.size > 0 && valuesB.size > 0 && 
-                          !Array.from(valuesA).every(v => valuesB.has(v));
+                          !Array.from(valuesA).every((v: string) => valuesB.has(v));
       
       analysis[key] = {
         inA,
@@ -258,14 +283,14 @@ export default function JsonExtractor() {
   }, [mode, comparisonAnalysis]);
 
   // Calculate field occurrences for extract mode
-  const fieldStats = useMemo(() => {
+  const fieldStats = useMemo<Record<string, { count: number; types: string[] }>>(() => {
     if (mode === 'compare') return {};
     
-    const stats = {};
-    allKeys.forEach(key => {
+    const stats: Record<string, { count: number; types: string[] }> = {};
+    allKeys.forEach((key: string) => {
       let count = 0;
-      const types = new Set();
-      jsonData.forEach(item => {
+      const types = new Set<string>();
+      jsonData.forEach((item: JsonObject) => {
         if (key in item && item[key] !== '' && item[key] !== null && item[key] !== undefined) {
           count++;
           types.add(typeof item[key]);
@@ -277,14 +302,14 @@ export default function JsonExtractor() {
   }, [mode, allKeys, jsonData]);
 
   // Group fields by common prefixes
-  const groupedFields = useMemo(() => {
+  const groupedFields = useMemo<{ groups: Record<string, string[]>; ungrouped: string[] }>(() => {
     const keys = mode === 'compare' && comparisonAnalysis ? 
                  Object.keys(comparisonAnalysis) : allKeys;
     
-    const groups = {};
-    const ungrouped = [];
+    const groups: Record<string, string[]> = {};
+    const ungrouped: string[] = [];
     
-    keys.forEach(key => {
+    keys.forEach((key: string) => {
       const numberMatch = key.match(/^(.+?)(_)?(\d+)$/);
       if (numberMatch) {
         const prefix = numberMatch[1];
@@ -299,16 +324,16 @@ export default function JsonExtractor() {
       }
     });
     
-    Object.keys(groups).forEach(prefix => {
+    Object.keys(groups).forEach((prefix: string) => {
       const fields = groups[prefix];
       if (fields.length < 2) {
         ungrouped.push(...fields);
         delete groups[prefix];
       } else {
-        const numbers = fields.map(f => {
+        const numbers = fields.map((f: string) => {
           const match = f.match(/(\d+)$/);
           return match ? parseInt(match[1]) : null;
-        }).filter(n => n !== null).sort((a, b) => a - b);
+        }).filter((n: number | null): n is number => n !== null).sort((a: number, b: number) => a - b);
         
         if (numbers.length < 2) {
           ungrouped.push(...fields);
@@ -331,20 +356,21 @@ export default function JsonExtractor() {
     }
     
     if (hideEmpty) {
-      if (mode === 'compare') {
-        keys = keys.filter(key => {
+      if (mode === 'compare' && comparisonAnalysis) {
+        keys = keys.filter((key: string) => {
           const analysis = comparisonAnalysis[key];
-          return analysis.countA > 0 || analysis.countB > 0;
+          return analysis && (analysis.countA > 0 || analysis.countB > 0);
         });
       } else {
-        keys = keys.filter(key => fieldStats[key]?.count > 0);
+        keys = keys.filter((key: string) => fieldStats[key]?.count > 0);
       }
     }
     
     // Filter by export mode in compare mode
-    if (mode === 'compare' && exportMode !== 'all') {
-      keys = keys.filter(key => {
+    if (mode === 'compare' && exportMode !== 'all' && comparisonAnalysis) {
+      keys = keys.filter((key: string) => {
         const analysis = comparisonAnalysis[key];
+        if (!analysis) return false;
         if (exportMode === 'common') {
           return analysis.status === 'both';
         } else if (exportMode === 'differences') {
@@ -357,7 +383,7 @@ export default function JsonExtractor() {
     return keys;
   }, [mode, allKeys, searchTerm, hideEmpty, fieldStats, comparisonAnalysis, exportMode]);
 
-  const toggleKey = (key) => {
+  const toggleKey = (key: string) => {
     const newSelected = new Set(selectedKeys);
     if (newSelected.has(key)) {
       newSelected.delete(key);
@@ -367,7 +393,7 @@ export default function JsonExtractor() {
     setSelectedKeys(newSelected);
   };
 
-  const toggleGroup = (groupName) => {
+  const toggleGroup = (groupName: string) => {
     const newCollapsed = new Set(collapsedGroups);
     if (newCollapsed.has(groupName)) {
       newCollapsed.delete(groupName);
@@ -387,12 +413,12 @@ export default function JsonExtractor() {
     setSelectedKeys(newSelected);
   };
 
-  const filteredData = useMemo(() => {
+  const filteredData = useMemo<JsonObject[]>(() => {
     if (selectedKeys.size === 0) return [];
     
-    return jsonData.map(item => {
-      const filtered = {};
-      Array.from(selectedKeys).sort().forEach(key => {
+    return jsonData.map((item: JsonObject) => {
+      const filtered: JsonObject = {} as JsonObject;
+      Array.from(selectedKeys).sort().forEach((key: string) => {
         if (key in item) {
           filtered[key] = item[key];
         }
@@ -401,12 +427,12 @@ export default function JsonExtractor() {
     });
   }, [jsonData, selectedKeys]);
 
-  const filteredDataB = useMemo(() => {
+  const filteredDataB = useMemo<JsonObject[]>(() => {
     if (mode !== 'compare' || selectedKeys.size === 0) return [];
     
-    return jsonDataB.map(item => {
-      const filtered = {};
-      Array.from(selectedKeys).sort().forEach(key => {
+    return jsonDataB.map((item: JsonObject) => {
+      const filtered: JsonObject = {} as JsonObject;
+      Array.from(selectedKeys).sort().forEach((key: string) => {
         if (key in item) {
           filtered[key] = item[key];
         }
@@ -415,7 +441,7 @@ export default function JsonExtractor() {
     });
   }, [mode, jsonDataB, selectedKeys]);
 
-  const getTypeColor = (value) => {
+  const getTypeColor = (value: JsonValue) => {
     const type = typeof value;
     if (value === null) return 'hsl(var(--type-null))';
     if (type === 'string') return 'hsl(var(--type-string))';
@@ -440,7 +466,7 @@ export default function JsonExtractor() {
         // Compare mode export
         csvRows.push(['Dataset', ...headers.map(h => `"${String(h).replace(/"/g, '""')}"`).join(',')].join(','));
         
-        filteredData.forEach((item, idx) => {
+        filteredData.forEach((item: JsonObject) => {
           const values = headers.map(header => {
             const value = item[header];
             if (value === null || value === undefined) return '';
@@ -450,7 +476,7 @@ export default function JsonExtractor() {
           csvRows.push(['A', ...values].join(','));
         });
         
-        filteredDataB.forEach((item, idx) => {
+        filteredDataB.forEach((item: JsonObject) => {
           const values = headers.map(header => {
             const value = item[header];
             if (value === null || value === undefined) return '';
@@ -484,8 +510,9 @@ export default function JsonExtractor() {
       a.click();
       document.body.removeChild(a);
       window.URL.revokeObjectURL(url);
-    } catch (err) {
-      alert('Error exporting CSV: ' + err.message);
+    } catch (err: unknown) {
+      const errorMessage = err instanceof Error ? err.message : String(err);
+      alert('Error exporting CSV: ' + errorMessage);
     }
   };
 
@@ -516,13 +543,14 @@ export default function JsonExtractor() {
       a.click();
       document.body.removeChild(a);
       window.URL.revokeObjectURL(url);
-    } catch (err) {
-      alert('Error exporting JSON: ' + err.message);
+    } catch (err: unknown) {
+      const errorMessage = err instanceof Error ? err.message : String(err);
+      alert('Error exporting JSON: ' + errorMessage);
     }
   };
 
-  const renderFieldCheckbox = (key) => {
-    if (mode === 'compare') {
+  const renderFieldCheckbox = (key: string) => {
+    if (mode === 'compare' && comparisonAnalysis) {
       const analysis = comparisonAnalysis[key];
       let statusColor = 'hsl(var(--muted-foreground))';
       let statusIcon = '✅';
@@ -980,7 +1008,6 @@ export default function JsonExtractor() {
                 <button
                   onClick={exportToCSV}
                   disabled={selectedKeys.size === 0}
-                  className="flex items-center gap-2 px-4 md:px-6 py-2 md:py-3 rounded-lg font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed text-sm md:text-base"
                   className="flex items-center gap-2 px-4 md:px-6 py-2 md:py-3 rounded-lg font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed text-sm md:text-base bg-accent text-accent-foreground"
                 >
                   <Download className="w-4 h-4 md:w-5 md:h-5" />
@@ -1006,7 +1033,6 @@ export default function JsonExtractor() {
                       <select
                         value={previewCount}
                         onChange={(e) => setPreviewCount(Number(e.target.value))}
-                        className="px-2 py-1 rounded text-sm"
                         className="px-2 py-1 rounded text-sm bg-muted text-foreground border border-border"
                       >
                         <option value={3}>3</option>
@@ -1040,8 +1066,9 @@ export default function JsonExtractor() {
                           </tr>
                         </thead>
                         <tbody>
-                          {Array.from(selectedKeys).sort().map((key, idx) => {
-                            const analysis = comparisonAnalysis[key];
+                          {Array.from(selectedKeys).sort().map((key: string) => {
+                            const analysis = comparisonAnalysis?.[key];
+                            if (!analysis) return null;
                             const samplesA = analysis.samplesA.map(v => 
                               typeof v === 'object' ? JSON.stringify(v) : String(v)
                             ).join(', ');

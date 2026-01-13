@@ -6,6 +6,21 @@ import { PageHeader } from '@/components/ui/page-header';
 import { Card } from '@/components/ui/card';
 import { HelpTooltip } from '@/components/ui/help-tooltip';
 
+interface LogEntry {
+  type: string;
+  message: string;
+  timestamp: string;
+}
+
+interface CombinedCode {
+  tsx: string;
+  html: string;
+  css: string;
+  js: string;
+}
+
+type RenderedComponentType = (() => React.ReactElement) | null;
+
 export default function LiveCodeRenderer() {
   const defaultCode = `export default function Demo() {
   const [count, setCount] = useState(0);
@@ -27,20 +42,20 @@ export default function LiveCodeRenderer() {
 }`;
 
   const [code, setCode] = useState(defaultCode);
-  const [renderedComponent, setRenderedComponent] = useState(null);
-  const [error, setError] = useState(null);
+  const [renderedComponent, setRenderedComponent] = useState<RenderedComponentType>(null);
+  const [error, setError] = useState<string | null>(null);
   const [isRendering, setIsRendering] = useState(false);
   const [copied, setCopied] = useState(false);
   const [librariesReady, setLibrariesReady] = useState(false);
   const [initialLoading, setInitialLoading] = useState(true);
-  const [logs, setLogs] = useState([]);
+  const [logs, setLogs] = useState<LogEntry[]>([]);
   const [activeTab, setActiveTab] = useState('preview');
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [showClearModal, setShowClearModal] = useState(false);
-  const [renderMode, setRenderMode] = useState('tsx');
-  const [htmlContent, setHtmlContent] = useState(null);
-  const [activeEditorTab, setActiveEditorTab] = useState('tsx');
-  const [combinedCode, setCombinedCode] = useState({
+  const [renderMode, setRenderMode] = useState<'tsx' | 'html' | 'combined'>('tsx');
+  const [htmlContent, setHtmlContent] = useState<string | null>(null);
+  const [activeEditorTab, setActiveEditorTab] = useState<'tsx' | 'html' | 'css' | 'js'>('tsx');
+  const [combinedCode, setCombinedCode] = useState<CombinedCode>({
     tsx: `function HelloWorld() {
   return (
     <div className="p-8">
@@ -68,7 +83,7 @@ window.customAlert = function() {
 };`
   });
 
-  const addLog = (type, message) => {
+  const addLog = (type: string, message: string) => {
     setLogs(prev => [...prev, { type, message, timestamp: new Date().toLocaleTimeString() }]);
   };
 
@@ -94,7 +109,7 @@ window.customAlert = function() {
     setShowClearModal(false);
   };
 
-  const updateCombinedCode = (type, value) => {
+  const updateCombinedCode = (type: keyof CombinedCode, value: string) => {
     setCombinedCode(prev => ({
       ...prev,
       [type]: value
@@ -103,7 +118,7 @@ window.customAlert = function() {
 
   const renderTSX = () => {
     if (!librariesReady && (renderMode === 'tsx' || renderMode === 'combined')) {
-      setError('LOADING');
+      setError('LOADING' as string);
       return;
     }
     
@@ -127,7 +142,7 @@ window.customAlert = function() {
         if (renderMode === 'html') {
           addLog('info', 'Rendering HTML/CSS/JS in isolated container');
           setHtmlContent(code);
-          setRenderedComponent(null);
+          setRenderedComponent(null as RenderedComponentType);
           addLog('success', 'HTML rendered successfully');
           setIsRendering(false);
           return;
@@ -176,9 +191,9 @@ window.customAlert = function() {
           const lucideIcons = window.lucide || {};
           const loggedIcons = Object.keys(lucideIcons).length;
           
-          const createPlaceholder = (name) => {
-            const warningLogged = {};
-            return (props) => {
+          const createPlaceholder = (name: string) => {
+            const warningLogged: Record<string, boolean> = {};
+            return (props: Record<string, any>) => {
               if (!warningLogged[name]) {
                 console.warn(`Icon "${name}" not available in lucide`);
                 warningLogged[name] = true;
@@ -194,7 +209,7 @@ window.customAlert = function() {
             'ChevronUp', 'ChevronLeft', 'ChevronRight', 'Star', 'Heart'
           ];
           
-          const safeIcons = {};
+          const safeIcons: Record<string, React.ComponentType<any>> = {};
           commonIcons.forEach(iconName => {
             safeIcons[iconName] = lucideIcons[iconName] || createPlaceholder(iconName);
           });
@@ -284,12 +299,12 @@ window.customAlert = function() {
           filename: 'component.tsx'
         }).code;
 
-        const lucideIcons = window.lucide || {};
-        const loggedIcons = Object.keys(lucideIcons).length;
+        const lucideIcons2 = window.lucide || {};
+        const loggedIcons2 = Object.keys(lucideIcons2).length;
         
-        const createPlaceholder = (name) => {
-          const warningLogged = {};
-          return (props) => {
+        const createPlaceholder2 = (name: string) => {
+          const warningLogged: Record<string, boolean> = {};
+          return (props: Record<string, any>) => {
             if (!warningLogged[name]) {
               console.warn(`Icon "${name}" not available in lucide`);
               warningLogged[name] = true;
@@ -298,21 +313,21 @@ window.customAlert = function() {
           };
         };
         
-        const commonIcons = [
+        const commonIcons2 = [
           'Search', 'Plus', 'Minus', 'Play', 'AlertCircle', 'Copy', 'Check', 
           'Upload', 'ExternalLink', 'MessageSquare', 'X', 'Info', 'Camera',
           'Download', 'Edit', 'Trash', 'Settings', 'Menu', 'ChevronDown',
           'ChevronUp', 'ChevronLeft', 'ChevronRight', 'Star', 'Heart'
         ];
         
-        const safeIcons = {};
-        commonIcons.forEach(iconName => {
-          safeIcons[iconName] = lucideIcons[iconName] || createPlaceholder(iconName);
+        const safeIcons2: Record<string, React.ComponentType<any>> = {};
+        commonIcons2.forEach(iconName => {
+          safeIcons2[iconName] = lucideIcons2[iconName] || createPlaceholder2(iconName);
         });
         
-        Object.keys(lucideIcons).forEach(iconName => {
-          if (!safeIcons[iconName]) {
-            safeIcons[iconName] = lucideIcons[iconName];
+        Object.keys(lucideIcons2).forEach(iconName => {
+          if (!safeIcons2[iconName]) {
+            safeIcons2[iconName] = lucideIcons2[iconName];
           }
         });
         
@@ -345,7 +360,7 @@ window.customAlert = function() {
           useRef: React.useRef,
           useContext: React.useContext,
           useReducer: React.useReducer,
-          ...safeIcons
+          ...safeIcons2
         };
 
         const scopeKeys = Object.keys(scope);
@@ -358,11 +373,12 @@ window.customAlert = function() {
           throw new Error('Result is not a valid component function');
         }
 
-        addLog('success', `Component rendered successfully (${loggedIcons} icons loaded)`);
+        addLog('success', `Component rendered successfully (${loggedIcons2} icons loaded)`);
         setRenderedComponent(() => Component);
       } catch (err) {
-        setError(err.message);
-        addLog('error', err.message);
+        const errorMessage = err instanceof Error ? err.message : String(err);
+        setError(errorMessage);
+        addLog('error', errorMessage);
         console.error('Render error:', err);
       } finally {
         setIsRendering(false);
@@ -376,11 +392,15 @@ window.customAlert = function() {
     setTimeout(() => setCopied(false), 2000);
   };
 
-  const handleFileImport = (e) => {
+  const handleFileImport = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
       const reader = new FileReader();
-      reader.onload = (ev) => setCode(ev.target.result);
+      reader.onload = (ev: ProgressEvent<FileReader>) => {
+        if (ev.target?.result && typeof ev.target.result === 'string') {
+          setCode(ev.target.result);
+        }
+      };
       reader.readAsText(file);
     }
   };
@@ -625,7 +645,7 @@ window.customAlert = function() {
               </div>
               {renderMode === 'combined' && (
                 <div className="flex gap-1 border-l pl-4 ml-4">
-                  {['tsx', 'html', 'css', 'js'].map((tab) => (
+                  {(['tsx', 'html', 'css', 'js'] as const).map((tab) => (
                     <button
                       key={tab}
                       onClick={() => setActiveEditorTab(tab)}
@@ -643,8 +663,8 @@ window.customAlert = function() {
             </div>
             
             <textarea
-              value={renderMode === 'combined' ? combinedCode[activeEditorTab] : code}
-              onChange={(e) => renderMode === 'combined' ? updateCombinedCode(activeEditorTab, e.target.value) : setCode(e.target.value)}
+              value={renderMode === 'combined' ? combinedCode[activeEditorTab as keyof CombinedCode] : code}
+              onChange={(e) => renderMode === 'combined' ? updateCombinedCode(activeEditorTab as keyof CombinedCode, e.target.value) : setCode(e.target.value)}
               className="flex-1 p-4 font-mono text-sm resize-none focus:outline-none bg-background text-foreground border-0"
               placeholder={renderMode === 'combined' ? `Paste your ${activeEditorTab.toUpperCase()} code here...` : "Paste your code here..."}
               spellCheck={false}
@@ -748,9 +768,9 @@ window.customAlert = function() {
                 sandbox="allow-scripts allow-forms allow-modals"
                 title="HTML Preview"
               />
-            ) : RenderedComponent ? (
+            ) : RenderedComponent && typeof RenderedComponent === 'function' ? (
               <div className="p-6 font-sans">
-                <RenderedComponent />
+                {React.createElement(RenderedComponent)}
               </div>
             ) : (
               <div className="flex items-center justify-center h-full text-muted-foreground">

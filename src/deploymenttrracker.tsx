@@ -1,32 +1,71 @@
 import React, { useState, useRef } from 'react';
-import { Plus, ExternalLink, Copy, Check, MessageSquare, X, Info, Trash2, GitBranch } from 'lucide-react';
+import { Plus, ExternalLink, Copy, Check, MessageSquare, X, Trash2, GitBranch } from 'lucide-react';
 import { PageContainer } from '@/components/ui/page-container';
 import { PageHeader } from '@/components/ui/page-header';
 import { Card } from '@/components/ui/card';
 import { Textarea } from '@/components/ui/input';
 import { HelpTooltip } from '@/components/ui/help-tooltip';
 
+interface Card {
+  id: number;
+  url: string;
+  title: string;
+  customTitle?: string;
+  column: string;
+  notes: string[];
+  isMultiSelect?: boolean;
+  selectedIds?: number[];
+}
+
+interface DuplicateToast {
+  id: number;
+  urls: Card[];
+  conflictCount: number;
+}
+
+interface Conflict {
+  url: string;
+  existingCard?: Card;
+  importedVersions: Card[];
+  columns: string[];
+}
+
+interface DragOverPosition {
+  columnId: string;
+  index: number;
+  type: 'before' | 'after';
+}
+
+interface ImportedData {
+  cards: Card[];
+  isMultiColumn: boolean;
+  totalCount?: number;
+  columnsImported?: string[];
+  columnTitle?: string;
+  count?: number;
+}
+
 const PRDeploymentTracker = () => {
   const [inputUrls, setInputUrls] = useState('');
-  const [cards, setCards] = useState([]);
-  const [draggedCard, setDraggedCard] = useState(null);
-  const [copiedColumn, setCopiedColumn] = useState(null);
-  const [editingNote, setEditingNote] = useState(null);
+  const [cards, setCards] = useState<Card[]>([]);
+  const [draggedCard, setDraggedCard] = useState<Card | null>(null);
+  const [copiedColumn, setCopiedColumn] = useState<string | null>(null);
+  const [editingNote, setEditingNote] = useState<number | null>(null);
   const [noteInput, setNoteInput] = useState('');
-  const [editingTitle, setEditingTitle] = useState(null);
+  const [editingTitle, setEditingTitle] = useState<number | null>(null);
   const [titleInput, setTitleInput] = useState('');
   const [toastMessage, setToastMessage] = useState('');
-  const dragScrollIntervalRef = useRef(null);
-  const [dragOverPosition, setDragOverPosition] = useState(null);
+  const dragScrollIntervalRef = useRef<NodeJS.Timeout | null>(null);
+  const [dragOverPosition, setDragOverPosition] = useState<DragOverPosition | null>(null);
   const [showExportModal, setShowExportModal] = useState(false);
   const [showDeleteModal, setShowDeleteModal] = useState(false);
-  const [cardToDelete, setCardToDelete] = useState(null);
+  const [cardToDelete, setCardToDelete] = useState<Card | null>(null);
   const [showReleaseModal, setShowReleaseModal] = useState(false);
-  const [selectedCards, setSelectedCards] = useState([]);
-  const [duplicateToasts, setDuplicateToasts] = useState([]);
+  const [selectedCards, setSelectedCards] = useState<number[]>([]);
+  const [duplicateToasts, setDuplicateToasts] = useState<DuplicateToast[]>([]);
   const [showConflictModal, setShowConflictModal] = useState(false);
-  const [conflictingPRs, setConflictingPRs] = useState([]);
-  const [conflictResolutions, setConflictResolutions] = useState({});
+  const [conflictingPRs, setConflictingPRs] = useState<Conflict[]>([]);
+  const [conflictResolutions, setConflictResolutions] = useState<Record<string, string | null>>({});
 
   const columns = [
     { id: 'yet-to-verify', title: 'Yet to Verify', color: 'bg-accent/10 border-accent/30' },
@@ -35,25 +74,25 @@ const PRDeploymentTracker = () => {
     { id: 'fully-deployed-not-fixed', title: 'Fully Deployed/Not Fixed', color: 'bg-destructive/10 border-destructive/30' }
   ];
 
-  const showToast = (message) => {
+  const showToast = (message: string) => {
     setToastMessage(message);
     setTimeout(() => setToastMessage(''), 3000);
   };
 
-  const showDuplicateToast = (duplicateData, conflictCount = 0) => {
+  const showDuplicateToast = (duplicateData: Card[], conflictCount = 0) => {
     const toastId = Date.now();
     setDuplicateToasts(prev => [...prev, { id: toastId, urls: duplicateData, conflictCount }]);
   };
 
-  const removeDuplicateToast = (toastId) => {
+  const removeDuplicateToast = (toastId: number) => {
     setDuplicateToasts(prev => prev.filter(toast => toast.id !== toastId));
   };
 
-  const copyDuplicateUrls = (duplicateData, toastId) => {
+  const copyDuplicateUrls = (duplicateData: Card[], _toastId: number | null) => {
     // Format: Title - URL (Notes: ...) [Would be in: Column]
     let output = 'Skipped Duplicates\n==================\n';
     
-    duplicateData.forEach(dup => {
+    duplicateData.forEach((dup: Card) => {
       const displayTitle = dup.customTitle || dup.title;
       let line = `${displayTitle} - ${dup.url}`;
       
@@ -72,12 +111,12 @@ const PRDeploymentTracker = () => {
     showToast(`Copied ${duplicateData.length} duplicate PR details to clipboard`);
   };
 
-  const openConflictModal = (conflicts) => {
+  const openConflictModal = (conflicts: Conflict[]) => {
     setConflictingPRs(conflicts);
     
     // Initialize resolutions with current column for existing PRs
-    const initialResolutions = {};
-    conflicts.forEach(conflict => {
+    const initialResolutions: Record<string, string | null> = {};
+    conflicts.forEach((conflict: Conflict) => {
       if (conflict.existingCard) {
         initialResolutions[conflict.url] = conflict.existingCard.column;
       } else {
@@ -88,20 +127,20 @@ const PRDeploymentTracker = () => {
     // Don't open modal automatically, wait for user to click "Review Conflicts"
   };
 
-  const showConflictModalFromToast = (toastId) => {
+  const showConflictModalFromToast = (toastId: number) => {
     setShowConflictModal(true);
     // Close the toast that opened this
     removeDuplicateToast(toastId);
   };
 
-  const setConflictResolution = (url, column) => {
+  const setConflictResolution = (url: string, column: string | null) => {
     setConflictResolutions(prev => ({
       ...prev,
       [url]: column
     }));
   };
 
-  const skipConflictPR = (url) => {
+  const skipConflictPR = (url: string) => {
     setConflictResolutions(prev => ({
       ...prev,
       [url]: 'SKIP'
@@ -110,7 +149,7 @@ const PRDeploymentTracker = () => {
 
   const confirmConflictResolutions = () => {
     // Apply the chosen resolutions
-    conflictingPRs.forEach(conflict => {
+    conflictingPRs.forEach((conflict: Conflict) => {
       const resolution = conflictResolutions[conflict.url];
       
       if (resolution === 'SKIP') {
@@ -126,8 +165,8 @@ const PRDeploymentTracker = () => {
         setCards(prev => prev.map(card => {
           if (card.url === conflict.url) {
             const existingNotes = new Set(card.notes || []);
-            const allNewNotes = conflict.importedVersions.flatMap(v => v.notes || []);
-            const notesToAdd = allNewNotes.filter(note => !existingNotes.has(note));
+            const allNewNotes = conflict.importedVersions.flatMap((v: Card) => v.notes || []);
+            const notesToAdd = allNewNotes.filter((note: string) => !existingNotes.has(note));
             
             return {
               ...card,
@@ -140,7 +179,7 @@ const PRDeploymentTracker = () => {
       } else {
         // Add new card with chosen column
         const firstVersion = conflict.importedVersions[0];
-        const allNotes = [...new Set(conflict.importedVersions.flatMap(v => v.notes || []))];
+        const allNotes = [...new Set(conflict.importedVersions.flatMap((v: Card) => v.notes || []))];
         
         setCards(prev => [...prev, {
           ...firstVersion,
@@ -163,11 +202,11 @@ const PRDeploymentTracker = () => {
     setConflictResolutions({});
   };
 
-  const parseImportedData = (text) => {
-    const lines = text.split('\n').map(line => line.trim()).filter(line => line);
+  const parseImportedData = (text: string): ImportedData | null => {
+    const lines = text.split('\n').map((line: string) => line.trim()).filter((line: string) => line);
     
     // Check for multi-column format first (multiple === separators)
-    const headerIndices = [];
+    const headerIndices: number[] = [];
     for (let i = 0; i < lines.length - 1; i++) {
       if (lines[i + 1] && lines[i + 1].startsWith('===')) {
         headerIndices.push(i);
@@ -176,11 +215,11 @@ const PRDeploymentTracker = () => {
     
     if (headerIndices.length > 1) {
       // Multi-column import
-      const importedCards = [];
+      const importedCards: Card[] = [];
       let totalCount = 0;
-      let columnsImported = [];
+      const columnsImported: string[] = [];
       
-      headerIndices.forEach((headerIndex, sectionIndex) => {
+      headerIndices.forEach((headerIndex: number, sectionIndex: number) => {
         const headerText = lines[headerIndex];
         const targetColumn = columns.find(col => col.title === headerText);
         
@@ -191,12 +230,12 @@ const PRDeploymentTracker = () => {
         const endIndex = nextHeaderIndex ? nextHeaderIndex : lines.length;
         
         // Get data lines for this section (skip header and === line)
-        const sectionLines = lines.slice(headerIndex + 2, endIndex).filter(line => 
+        const sectionLines = lines.slice(headerIndex + 2, endIndex).filter((line: string) => 
           !line.startsWith('Last validated:') && 
           line.includes('http') // Only lines with URLs
         );
         
-        sectionLines.forEach((line, index) => {
+        sectionLines.forEach((line: string, index: number) => {
           // Parse format: "Title - URL (Notes: note1, note2)"
           const urlMatch = line.match(/(https?:\/\/[^\s)]+)/);
           if (!urlMatch) return;
@@ -207,7 +246,7 @@ const PRDeploymentTracker = () => {
           
           // Extract notes if present
           const notesMatch = afterUrl.match(/\(Notes: ([^)]+)\)/);
-          const notes = notesMatch ? notesMatch[1].split(',').map(n => n.trim()) : [];
+          const notes = notesMatch ? notesMatch[1].split(',').map((n: string) => n.trim()) : [];
           
           // Determine if title is custom or original PR format
           const originalTitle = extractPRNumber(url);
@@ -254,14 +293,14 @@ const PRDeploymentTracker = () => {
     
     if (!targetColumn) return null; // Not imported data format
     
-    const dataLines = lines.slice(headerIndex + 2).filter(line => 
+    const dataLines = lines.slice(headerIndex + 2).filter((line: string) => 
       !line.startsWith('Last validated:') && 
       line.includes('http') // Only lines with URLs
     );
     
-    const importedCards = [];
+    const importedCards: Card[] = [];
     
-    dataLines.forEach((line, index) => {
+    dataLines.forEach((line: string, index: number) => {
       // Parse format: "Title - URL (Notes: note1, note2)"
       const urlMatch = line.match(/(https?:\/\/[^\s)]+)/);
       if (!urlMatch) return;
@@ -272,7 +311,7 @@ const PRDeploymentTracker = () => {
       
       // Extract notes if present
       const notesMatch = afterUrl.match(/\(Notes: ([^)]+)\)/);
-      const notes = notesMatch ? notesMatch[1].split(',').map(n => n.trim()) : [];
+      const notes = notesMatch ? notesMatch[1].split(',').map((n: string) => n.trim()) : [];
       
       // Determine if title is custom or original PR format
       const originalTitle = extractPRNumber(url);
@@ -296,7 +335,7 @@ const PRDeploymentTracker = () => {
     };
   };
 
-  const extractPRNumber = (url) => {
+  const extractPRNumber = (url: string): string => {
     const match = url.match(/\/pull\/(\d+)/);
     return match ? `PR #${match[1]}` : 'Unknown PR';
   };
@@ -310,12 +349,12 @@ const PRDeploymentTracker = () => {
     if (importedData) {
       // Handle imported tracker data with duplicate detection
       const existingUrls = new Set(cards.map(card => card.url));
-      const duplicateData = [];
-      const conflictData = {}; // Track conflicts by URL
-      const newCards = [];
-      const seenInImport = new Set(); // Track URLs we've already processed in this import
+      const duplicateData: Card[] = [];
+      const conflictData: Record<string, { url: string; existingCard: Card; columns: Set<string>; versions: Card[] }> = {}; // Track conflicts by URL
+      const newCards: Card[] = [];
+      const seenInImport = new Set<string>(); // Track URLs we've already processed in this import
       
-      importedData.cards.forEach(card => {
+      importedData.cards.forEach((card: Card) => {
         if (seenInImport.has(card.url)) {
           // Check if this is a different column than what we've seen
           const existingEntry = conflictData[card.url];
@@ -331,6 +370,8 @@ const PRDeploymentTracker = () => {
         if (existingUrls.has(card.url)) {
           // Duplicate of existing card in tracker
           const existingCard = cards.find(c => c.url === card.url);
+          
+          if (!existingCard) return;
           
           // Check if columns differ
           if (existingCard.column !== card.column) {
@@ -353,7 +394,7 @@ const PRDeploymentTracker = () => {
             setCards(prev => prev.map(existingCard => {
               if (existingCard.url === card.url && card.notes.length > 0) {
                 const existingNotes = new Set(existingCard.notes || []);
-                const notesToAdd = card.notes.filter(note => !existingNotes.has(note));
+                const notesToAdd = card.notes.filter((note: string) => !existingNotes.has(note));
                 
                 if (notesToAdd.length > 0) {
                   return {
@@ -377,7 +418,7 @@ const PRDeploymentTracker = () => {
       }
       
       // Convert conflict data to array
-      const conflicts = Object.values(conflictData).map(conflict => ({
+      const conflicts: Conflict[] = Object.values(conflictData).map((conflict: { url: string; existingCard: Card; columns: Set<string>; versions: Card[] }) => ({
         url: conflict.url,
         existingCard: conflict.existingCard,
         importedVersions: conflict.versions,
@@ -386,11 +427,11 @@ const PRDeploymentTracker = () => {
       
       // Show appropriate toast messages
       if (importedData.isMultiColumn) {
-        if (newCards.length > 0) {
+        if (newCards.length > 0 && importedData.columnsImported) {
           showToast(`Imported ${newCards.length} PRs across ${importedData.columnsImported.length} columns: ${importedData.columnsImported.join(', ')}`);
         }
       } else {
-        if (newCards.length > 0) {
+        if (newCards.length > 0 && importedData.columnTitle) {
           showToast(`Imported ${newCards.length} PRs to "${importedData.columnTitle}" column with titles and notes`);
         }
       }
@@ -410,11 +451,11 @@ const PRDeploymentTracker = () => {
     }
     
     // Fall back to regular URL parsing with duplicate detection
-    const lines = inputUrls.split('\n').filter(line => line.trim());
+    const lines = inputUrls.split('\n').filter((line: string) => line.trim());
     
     // Extract URLs from lines, handling text before/after URLs
-    const urls = [];
-    lines.forEach(line => {
+    const urls: string[] = [];
+    lines.forEach((line: string) => {
       const trimmed = line.trim();
       const urlMatch = trimmed.match(/(https?:\/\/[^\s]+)/);
       if (urlMatch) {
@@ -428,22 +469,23 @@ const PRDeploymentTracker = () => {
     }
     
     // Check for duplicates in regular URL additions
-    const existingUrls = new Set(cards.map(card => card.url));
-    const duplicateData = [];
-    const uniqueUrls = [];
-    const seenInImport = new Set(); // Track URLs within this import
+    const existingUrls2 = new Set(cards.map(card => card.url));
+    const duplicateData2: Card[] = [];
+    const uniqueUrls: string[] = [];
+    const seenInImport2 = new Set<string>(); // Track URLs within this import
     
-    urls.forEach(url => {
-      if (seenInImport.has(url)) {
+    urls.forEach((url: string) => {
+      if (seenInImport2.has(url)) {
         // Duplicate within same import - silently skip
         return;
       }
       
-      seenInImport.add(url);
+      seenInImport2.add(url);
       
-      if (existingUrls.has(url)) {
+      if (existingUrls2.has(url)) {
         // Store as card-like object for consistent formatting
-        duplicateData.push({
+        duplicateData2.push({
+          id: Date.now(),
           url: url,
           title: extractPRNumber(url),
           customTitle: '',
@@ -457,7 +499,7 @@ const PRDeploymentTracker = () => {
     
     // Add only unique URLs
     if (uniqueUrls.length > 0) {
-      const newCards = uniqueUrls.map((url, index) => ({
+      const newCards2: Card[] = uniqueUrls.map((url: string, index: number) => ({
         id: Date.now() + index,
         url: url,
         title: extractPRNumber(url),
@@ -466,19 +508,19 @@ const PRDeploymentTracker = () => {
         notes: []
       }));
       
-      setCards(prev => [...prev, ...newCards]);
+      setCards(prev => [...prev, ...newCards2]);
       showToast(`Added ${uniqueUrls.length} PRs to "Yet to Verify" column`);
     }
     
     // Show duplicate toast if any were found
-    if (duplicateData.length > 0) {
-      showDuplicateToast(duplicateData);
+    if (duplicateData2.length > 0) {
+      showDuplicateToast(duplicateData2);
     }
     
     setInputUrls('');
   };
 
-  const handleDragStart = (e, card) => {
+  const handleDragStart = (e: React.DragEvent, card: Card) => {
     // If card is part of selection, drag all selected cards
     // Otherwise, just drag this card
     if (selectedCards.includes(card.id)) {
@@ -490,7 +532,8 @@ const PRDeploymentTracker = () => {
     e.dataTransfer.effectAllowed = 'move';
     
     // Style the drag image with prominent glow effect
-    const dragElement = e.target.cloneNode(true);
+    const target = e.target as HTMLElement;
+    const dragElement = target.cloneNode(true) as HTMLElement;
     const root = document.documentElement;
     const isDark = root.classList.contains('dark');
     dragElement.style.transform = 'translateY(-4px)';
@@ -506,7 +549,8 @@ const PRDeploymentTracker = () => {
     document.body.appendChild(dragElement);
     dragElement.style.position = 'absolute';
     dragElement.style.top = '-1000px';
-    e.dataTransfer.setDragImage(dragElement, e.offsetX, e.offsetY);
+    const nativeEvent = e.nativeEvent as DragEvent;
+    e.dataTransfer.setDragImage(dragElement, nativeEvent.offsetX || 0, nativeEvent.offsetY || 0);
     
     // Clean up drag image after drag starts
     setTimeout(() => {
@@ -516,7 +560,7 @@ const PRDeploymentTracker = () => {
     }, 0);
     
     // Add mouse move listener for auto-scroll
-    const handleDragMove = (event) => {
+    const handleDragMove = (event: DragEvent) => {
       const scrollZone = 30; // Small zone - only at very edges
       const scrollSpeed = 5; // Increased from 3 for slightly faster scroll
       const viewportHeight = window.innerHeight;
@@ -546,10 +590,12 @@ const PRDeploymentTracker = () => {
             if (newScrollY > 5) {
               window.scrollBy(0, -scrollSpeed);
             } else {
-              clearInterval(dragScrollIntervalRef.current);
-              dragScrollIntervalRef.current = null;
+              if (dragScrollIntervalRef.current) {
+                clearInterval(dragScrollIntervalRef.current);
+                dragScrollIntervalRef.current = null;
+              }
             }
-          }, 33); // Increased from 50ms to 33ms (30fps)
+          }, 33) as unknown as NodeJS.Timeout; // Increased from 50ms to 33ms (30fps)
         } else if (shouldScrollDown) {
           dragScrollIntervalRef.current = setInterval(() => {
             const newScrollY = window.scrollY;
@@ -557,10 +603,12 @@ const PRDeploymentTracker = () => {
             if (newScrollY < newMaxScrollY - 5) {
               window.scrollBy(0, scrollSpeed);
             } else {
-              clearInterval(dragScrollIntervalRef.current);
-              dragScrollIntervalRef.current = null;
+              if (dragScrollIntervalRef.current) {
+                clearInterval(dragScrollIntervalRef.current);
+                dragScrollIntervalRef.current = null;
+              }
             }
-          }, 33); // Increased from 50ms to 33ms (30fps)
+          }, 33) as unknown as NodeJS.Timeout; // Increased from 50ms to 33ms (30fps)
         }
       }
     };
@@ -578,34 +626,34 @@ const PRDeploymentTracker = () => {
     document.addEventListener('dragend', handleDragEnd);
   };
 
-  const handleDragOver = (e) => {
+  const handleDragOver = (e: React.DragEvent) => {
     e.preventDefault();
     e.dataTransfer.dropEffect = 'move';
     
     // Only handle reordering if dragging within the same column
-    const columnElement = e.currentTarget;
+    const columnElement = e.currentTarget as HTMLElement;
     const columnId = columnElement.getAttribute('data-column-id');
     
-    if (draggedCard && draggedCard.column === columnId) {
-      const cards = columnElement.querySelectorAll('[data-card-id]');
+    if (draggedCard && columnId && draggedCard.column === columnId) {
+      const cardElements = columnElement.querySelectorAll('[data-card-id]');
       const mouseY = e.clientY;
       
-      let insertPosition = null;
+      let insertPosition: DragOverPosition | null = null;
       
-      for (let i = 0; i < cards.length; i++) {
-        const card = cards[i];
+      for (let i = 0; i < cardElements.length; i++) {
+        const card = cardElements[i] as HTMLElement;
         const rect = card.getBoundingClientRect();
         const cardMiddle = rect.top + rect.height / 2;
         
         if (mouseY < cardMiddle) {
-          insertPosition = { columnId, index: i, type: 'before' };
+          insertPosition = { columnId, index: i, type: 'before' as const };
           break;
         }
       }
       
       // If no position found, insert at end
       if (!insertPosition) {
-        insertPosition = { columnId, index: cards.length, type: 'after' };
+        insertPosition = { columnId, index: cardElements.length, type: 'after' as const };
       }
       
       setDragOverPosition(insertPosition);
@@ -614,18 +662,21 @@ const PRDeploymentTracker = () => {
     }
   };
 
-  const handleDrop = (e, columnId) => {
+  const handleDrop = (e: React.DragEvent, columnId: string) => {
     e.preventDefault();
     if (!draggedCard) return;
 
-    if (draggedCard.isMultiSelect) {
+    if (draggedCard.isMultiSelect && draggedCard.selectedIds) {
       // Moving multiple selected cards
       setCards(prev => prev.map(card => 
-        draggedCard.selectedIds.includes(card.id)
+        draggedCard.selectedIds!.includes(card.id)
           ? { ...card, column: columnId }
           : card
       ));
-      showToast(`Moved ${draggedCard.selectedIds.length} cards to ${columns.find(col => col.id === columnId).title}`);
+      const column = columns.find(col => col.id === columnId);
+      if (column) {
+        showToast(`Moved ${draggedCard.selectedIds.length} cards to ${column.title}`);
+      }
       clearSelection();
     } else if (draggedCard.column === columnId && dragOverPosition) {
       // Reordering within same column
@@ -657,19 +708,21 @@ const PRDeploymentTracker = () => {
     }
   };
 
-  const openPR = (url) => {
+  const openPR = (url: string) => {
     window.open(url, '_blank');
   };
 
-  const getCardsInColumn = (columnId) => {
+  const getCardsInColumn = (columnId: string): Card[] => {
     return cards.filter(card => card.column === columnId);
   };
 
-  const copyColumnUrls = async (columnId) => {
+  const copyColumnUrls = async (columnId: string) => {
     const columnCards = getCardsInColumn(columnId);
     if (columnCards.length === 0) return;
     
     const column = columns.find(col => col.id === columnId);
+    if (!column) return;
+    
     const now = new Date();
     
     // Simplified date/time formatting to avoid potential issues
@@ -707,14 +760,14 @@ const PRDeploymentTracker = () => {
       setCopiedColumn(columnId);
       setTimeout(() => setCopiedColumn(null), 2000);
       showToast(`Copied ${columnCards.length} PRs from "${column.title}" column`);
-    } catch (err) {
+    } catch (err: unknown) {
       console.error('Failed to copy URLs:', err);
       // Fallback for browsers that don't support clipboard API
       alert('Copy failed. Text to copy:\n\n' + fullText);
     }
   };
 
-  const addNote = (cardId) => {
+  const addNote = (cardId: number) => {
     if (!noteInput.trim()) return;
     
     setCards(prev => prev.map(card => 
@@ -727,7 +780,7 @@ const PRDeploymentTracker = () => {
     setEditingNote(null);
   };
 
-  const removeNote = (cardId, noteIndex) => {
+  const removeNote = (cardId: number, noteIndex: number) => {
     setCards(prev => prev.map(card => 
       card.id === cardId 
         ? { ...card, notes: card.notes.filter((_, index) => index !== noteIndex) }
@@ -735,7 +788,7 @@ const PRDeploymentTracker = () => {
     ));
   };
 
-  const handleNoteKeyPress = (e, cardId) => {
+  const handleNoteKeyPress = (e: React.KeyboardEvent, cardId: number) => {
     if (e.key === 'Enter') {
       addNote(cardId);
     } else if (e.key === 'Escape') {
@@ -744,7 +797,7 @@ const PRDeploymentTracker = () => {
     }
   };
 
-  const saveTitle = (cardId) => {
+  const saveTitle = (cardId: number) => {
     if (titleInput.trim()) {
       setCards(prev => prev.map(card => 
         card.id === cardId 
@@ -756,7 +809,7 @@ const PRDeploymentTracker = () => {
     setEditingTitle(null);
   };
 
-  const handleTitleKeyPress = (e, cardId) => {
+  const handleTitleKeyPress = (e: React.KeyboardEvent, cardId: number) => {
     if (e.key === 'Enter') {
       saveTitle(cardId);
     } else if (e.key === 'Escape') {
@@ -765,14 +818,14 @@ const PRDeploymentTracker = () => {
     }
   };
 
-  const deleteCard = (cardId) => {
+  const deleteCard = (cardId: number) => {
     setCards(prev => prev.filter(card => card.id !== cardId));
     showToast('Card deleted');
     setShowDeleteModal(false);
     setCardToDelete(null);
   };
 
-  const confirmDelete = (card) => {
+  const confirmDelete = (card: Card) => {
     setCardToDelete(card);
     setShowDeleteModal(true);
   };
@@ -782,7 +835,7 @@ const PRDeploymentTracker = () => {
     setCardToDelete(null);
   };
 
-  const handleCardClick = (e, card) => {
+  const handleCardClick = (e: React.MouseEvent, card: Card) => {
     // Check if Ctrl (Windows/Linux) or Cmd (Mac) is pressed
     if (e.ctrlKey || e.metaKey) {
       e.preventDefault();
@@ -806,7 +859,7 @@ const PRDeploymentTracker = () => {
 
   // Add keyboard listener for Escape to clear selection
   React.useEffect(() => {
-    const handleKeyDown = (e) => {
+    const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Escape' && selectedCards.length > 0) {
         clearSelection();
         showToast('Selection cleared');
@@ -835,7 +888,7 @@ const PRDeploymentTracker = () => {
     let totalCards = 0;
     
     // Process each column that has cards
-    columns.forEach((column, index) => {
+    columns.forEach((column) => {
       const columnCards = getCardsInColumn(column.id);
       if (columnCards.length > 0) {
         totalCards += columnCards.length;
@@ -895,7 +948,7 @@ const PRDeploymentTracker = () => {
     let totalCards = 0;
     
     // Process each column that has cards
-    columns.forEach((column, index) => {
+    columns.forEach((column) => {
       const columnCards = getCardsInColumn(column.id);
       if (columnCards.length > 0) {
         totalCards += columnCards.length;
@@ -1109,7 +1162,11 @@ const PRDeploymentTracker = () => {
                   Cancel
                 </button>
                 <button
-                  onClick={() => deleteCard(cardToDelete.id)}
+                  onClick={() => {
+                    if (cardToDelete) {
+                      deleteCard(cardToDelete.id);
+                    }
+                  }}
                   className="bg-destructive text-destructive-foreground px-6 py-2 rounded-lg hover:bg-destructive/90 transition-colors flex items-center gap-2"
                 >
                   <Trash2 size={16} />
@@ -1140,9 +1197,9 @@ const PRDeploymentTracker = () => {
               {/* Scrollable Content */}
               <div className="flex-1 overflow-y-auto p-6">
                 <div className="space-y-6">
-                  {conflictingPRs.map((conflict, index) => {
+                  {conflictingPRs.map((conflict: Conflict) => {
                     const displayTitle = conflict.importedVersions[0].customTitle || conflict.importedVersions[0].title;
-                    const allNotes = [...new Set(conflict.importedVersions.flatMap(v => v.notes || []))];
+                    const allNotes = [...new Set(conflict.importedVersions.flatMap((v: Card) => v.notes || []))];
                     const currentResolution = conflictResolutions[conflict.url];
                     const isSkipped = currentResolution === 'SKIP';
                     
@@ -1159,7 +1216,7 @@ const PRDeploymentTracker = () => {
                           </div>
                           {conflict.existingCard ? (
                             <div className="text-xs font-medium text-accent bg-accent/10 px-3 py-1 rounded-full ml-4 whitespace-nowrap border border-accent/30">
-                              In: {columns.find(col => col.id === conflict.existingCard.column)?.title}
+                              In: {columns.find(col => col.id === conflict.existingCard?.column)?.title}
                             </div>
                           ) : (
                             <div className="text-xs font-medium text-orange-500 dark:text-orange-400 bg-orange-500/10 dark:bg-orange-400/10 px-3 py-1 rounded-full ml-4 whitespace-nowrap border border-orange-500/30 dark:border-orange-400/30">
@@ -1182,7 +1239,7 @@ const PRDeploymentTracker = () => {
                           <div className="mb-3">
                             <div className="text-sm font-semibold text-foreground mb-2">Choose status:</div>
                             <div className="flex flex-wrap gap-2">
-                              {conflict.columns.map(columnId => {
+                              {conflict.columns.map((columnId: string) => {
                                 const column = columns.find(col => col.id === columnId);
                                 const isSelected = currentResolution === columnId;
                                 
@@ -1205,7 +1262,7 @@ const PRDeploymentTracker = () => {
                         )}
 
                         <button
-                          onClick={() => isSkipped ? setConflictResolution(conflict.url, conflict.existingCard?.column || null) : skipConflictPR(conflict.url)}
+                          onClick={() => isSkipped ? setConflictResolution(conflict.url, conflict.existingCard ? conflict.existingCard.column : null) : skipConflictPR(conflict.url)}
                           className="text-muted-foreground hover:text-foreground px-4 py-2 rounded border border-border hover:border-border transition-colors text-sm"
                         >
                           {isSkipped ? 'Undo Skip' : 'Skip This PR'}
@@ -1224,33 +1281,33 @@ const PRDeploymentTracker = () => {
 
               {/* Fixed Footer */}
               <div className="flex justify-between items-center gap-3 p-6 border-t border-border bg-muted">
-                <button
-                  onClick={() => {
-                    const conflictDuplicates = conflictingPRs.flatMap(c => c.importedVersions);
-                    copyDuplicateUrls(conflictDuplicates, null);
-                  }}
-                  className="text-muted-foreground hover:text-foreground px-4 py-2 rounded border border-border hover:border-accent transition-colors text-sm"
-                >
-                  Copy Details
-                </button>
-                <div className="flex gap-3">
                   <button
-                    onClick={cancelConflictResolution}
-                    className="px-6 py-2 text-muted-foreground hover:text-foreground transition-colors"
+                    onClick={() => {
+                      const conflictDuplicates = conflictingPRs.flatMap((c: Conflict) => c.importedVersions);
+                      copyDuplicateUrls(conflictDuplicates, 0);
+                    }}
+                    className="text-muted-foreground hover:text-foreground px-4 py-2 rounded border border-border hover:border-accent transition-colors text-sm"
                   >
-                    Cancel
+                    Copy Details
                   </button>
-                  <button
-                    onClick={confirmConflictResolutions}
-                    disabled={conflictingPRs.some(c => {
-                      const resolution = conflictResolutions[c.url];
-                      return resolution !== 'SKIP' && (!resolution || (!c.existingCard && !resolution));
-                    })}
-                    className="bg-accent text-accent-foreground px-6 py-2 rounded-lg hover:bg-accent/90 transition-colors disabled:bg-muted disabled:text-muted-foreground disabled:cursor-not-allowed"
-                  >
-                    Confirm Selections ({Object.values(conflictResolutions).filter(r => r && r !== 'SKIP').length}/{conflictingPRs.length})
-                  </button>
-                </div>
+                  <div className="flex gap-3">
+                    <button
+                      onClick={cancelConflictResolution}
+                      className="px-6 py-2 text-muted-foreground hover:text-foreground transition-colors"
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      onClick={confirmConflictResolutions}
+                      disabled={conflictingPRs.some((c: Conflict) => {
+                        const resolution = conflictResolutions[c.url];
+                        return resolution !== 'SKIP' && (!resolution || (!c.existingCard && !resolution));
+                      })}
+                      className="bg-accent text-accent-foreground px-6 py-2 rounded-lg hover:bg-accent/90 transition-colors disabled:bg-muted disabled:text-muted-foreground disabled:cursor-not-allowed"
+                    >
+                      Confirm Selections ({Object.values(conflictResolutions).filter((r: string | null) => r && r !== 'SKIP').length}/{conflictingPRs.length})
+                    </button>
+                  </div>
               </div>
             </div>
           </div>
@@ -1469,11 +1526,12 @@ const PRDeploymentTracker = () => {
                         data-card-id={card.id}
                         draggable={editingNote !== card.id && editingTitle !== card.id}
                         onClick={(e) => handleCardClick(e, card)}
-                        onDragStart={(e) => {
+                        onDragStart={(e: React.DragEvent) => {
                           // Only start drag if not editing note/title and not clicking on buttons
-                          if (editingNote === card.id || editingTitle === card.id || e.target.closest('button') || e.target.closest('input')) {
+                          const target = e.target as HTMLElement;
+                          if (editingNote === card.id || editingTitle === card.id || target.closest('button') || target.closest('input')) {
                             e.preventDefault();
-                            return false;
+                            return;
                           }
                           handleDragStart(e, card);
                         }}

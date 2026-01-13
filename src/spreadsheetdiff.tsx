@@ -1,5 +1,5 @@
-import React, { useState, useMemo } from 'react';
-import { Upload, Download, HelpCircle, AlertCircle, X, FileSpreadsheet } from 'lucide-react';
+import { useState, useMemo } from 'react';
+import { Download, AlertCircle, X, FileSpreadsheet } from 'lucide-react';
 import Papa from 'papaparse';
 import * as XLSX from 'xlsx';
 import { PageContainer } from '@/components/ui/page-container';
@@ -8,20 +8,21 @@ import { Card } from '@/components/ui/card';
 import { Input, Textarea } from '@/components/ui/input';
 import { HelpTooltip } from '@/components/ui/help-tooltip';
 
-export default function SpreadsheetComparator() {
-  const [data1, setData1] = useState(null);
-  const [data2, setData2] = useState(null);
-  const [headers1, setHeaders1] = useState([]);
-  const [headers2, setHeaders2] = useState([]);
-  const [showTooltip, setShowTooltip] = useState(false);
-  const [selectedColumn, setSelectedColumn] = useState(null);
-  const [hideIdentical, setHideIdentical] = useState(false);
-  const [colLetters1, setColLetters1] = useState([]);
-  const [colLetters2, setColLetters2] = useState([]);
-  const [showExportModal, setShowExportModal] = useState(false);
-  const [selectedExportColumns, setSelectedExportColumns] = useState([]);
+type SpreadsheetRow = Record<string, string | number | null | undefined>;
 
-  const getExcelColumnLetter = (index) => {
+export default function SpreadsheetComparator() {
+  const [data1, setData1] = useState<SpreadsheetRow[] | null>(null);
+  const [data2, setData2] = useState<SpreadsheetRow[] | null>(null);
+  const [headers1, setHeaders1] = useState<string[]>([]);
+  const [headers2, setHeaders2] = useState<string[]>([]);
+  const [selectedColumn, setSelectedColumn] = useState<string | null>(null);
+  const [hideIdentical, setHideIdentical] = useState(false);
+  const [colLetters1, setColLetters1] = useState<string[]>([]);
+  const [colLetters2, setColLetters2] = useState<string[]>([]);
+  const [showExportModal, setShowExportModal] = useState(false);
+  const [selectedExportColumns, setSelectedExportColumns] = useState<string[]>([]);
+
+  const getExcelColumnLetter = (index: number): string => {
     let letter = '';
     let num = index;
     while (num >= 0) {
@@ -31,8 +32,13 @@ export default function SpreadsheetComparator() {
     return letter;
   };
 
-  const parseFile = async (file, setData, setHeaders, setColLetters) => {
-    const ext = file.name.split('.').pop().toLowerCase();
+  const parseFile = async (
+    file: File,
+    setData: React.Dispatch<React.SetStateAction<SpreadsheetRow[] | null>>,
+    setHeaders: React.Dispatch<React.SetStateAction<string[]>>,
+    setColLetters: React.Dispatch<React.SetStateAction<string[]>>
+  ) => {
+    const ext = file.name.split('.').pop()?.toLowerCase() || '';
     
     if (ext === 'csv') {
       const text = await file.text();
@@ -40,22 +46,22 @@ export default function SpreadsheetComparator() {
         header: true,
         skipEmptyLines: true,
         dynamicTyping: false,
-        complete: (results) => {
-          const filtered = results.data.filter(row => {
+        complete: (results: Papa.ParseResult<Record<string, unknown>>) => {
+          const filtered = results.data.filter((row: Record<string, unknown>) => {
             const values = Object.values(row);
             return values.some(v => v !== null && v !== undefined && String(v).trim() !== '');
           });
           
-          const cleaned = filtered.map(row => {
-            const newRow = {};
-            Object.keys(row).forEach(key => {
+          const cleaned: SpreadsheetRow[] = filtered.map((row: Record<string, unknown>) => {
+            const newRow: SpreadsheetRow = {} as SpreadsheetRow;
+            Object.keys(row).forEach((key: string) => {
               const trimmedKey = key.trim();
-              newRow[trimmedKey] = row[key];
+              newRow[trimmedKey] = row[key] as string | number | null | undefined;
             });
             return newRow;
           });
-          const cleanedHeaders = results.meta.fields.map(h => h.trim());
-          const letters = cleanedHeaders.map((_, idx) => getExcelColumnLetter(idx));
+          const cleanedHeaders = (results.meta.fields || []).map((h: string) => h.trim());
+          const letters = cleanedHeaders.map((_, idx: number) => getExcelColumnLetter(idx));
           setData(cleaned);
           setHeaders(cleanedHeaders);
           setColLetters(letters);
@@ -64,9 +70,13 @@ export default function SpreadsheetComparator() {
     } else if (ext === 'xlsx' || ext === 'xls') {
       const buffer = await file.arrayBuffer();
       const wb = XLSX.read(buffer);
-      const ws = wb.Sheets[wb.SheetNames[0]];
+      const firstSheetName = wb.SheetNames[0];
+      if (!firstSheetName) return;
+      const ws = wb.Sheets[firstSheetName];
       
-      const range = XLSX.utils.decode_range(ws['!ref']);
+      const ref = ws['!ref'];
+      if (!ref) return;
+      const range = XLSX.utils.decode_range(ref);
       let headerRow = range.s.r;
       
       for (let r = range.s.r; r <= Math.min(range.s.r + 5, range.e.r); r++) {
@@ -87,39 +97,44 @@ export default function SpreadsheetComparator() {
       const jsonData = XLSX.utils.sheet_to_json(ws, { 
         defval: '',
         range: headerRow
-      });
+      }) as Record<string, unknown>[];
       
-      const cleaned = jsonData.map(row => {
-        const newRow = {};
-        Object.keys(row).forEach(key => {
-          newRow[key.trim()] = row[key];
+      const cleaned: SpreadsheetRow[] = jsonData.map((row: Record<string, unknown>) => {
+        const newRow: SpreadsheetRow = {} as SpreadsheetRow;
+        Object.keys(row).forEach((key: string) => {
+          newRow[key.trim()] = row[key] as string | number | null | undefined;
         });
         return newRow;
       });
       const cleanedHeaders = cleaned.length > 0 ? Object.keys(cleaned[0]) : [];
-      const letters = cleanedHeaders.map((_, idx) => getExcelColumnLetter(idx));
+      const letters = cleanedHeaders.map((_, idx: number) => getExcelColumnLetter(idx));
       setData(cleaned);
       setHeaders(cleanedHeaders);
       setColLetters(letters);
     }
   };
 
-  const parsePasted = (text, setData, setHeaders, setColLetters) => {
+  const parsePasted = (
+    text: string,
+    setData: React.Dispatch<React.SetStateAction<SpreadsheetRow[] | null>>,
+    setHeaders: React.Dispatch<React.SetStateAction<string[]>>,
+    setColLetters: React.Dispatch<React.SetStateAction<string[]>>
+  ) => {
     Papa.parse(text.trim(), {
       header: true,
       skipEmptyLines: true,
       dynamicTyping: false,
-      complete: (results) => {
-        const cleaned = results.data.map(row => {
-          const newRow = {};
-          Object.keys(row).forEach(key => {
+      complete: (results: Papa.ParseResult<Record<string, unknown>>) => {
+        const cleaned: SpreadsheetRow[] = results.data.map((row: Record<string, unknown>) => {
+          const newRow: SpreadsheetRow = {} as SpreadsheetRow;
+          Object.keys(row).forEach((key: string) => {
             const trimmedKey = key.trim();
-            newRow[trimmedKey] = row[key];
+            newRow[trimmedKey] = row[key] as string | number | null | undefined;
           });
           return newRow;
         });
-        const cleanedHeaders = results.meta.fields.map(h => h.trim());
-        const letters = cleanedHeaders.map((_, idx) => getExcelColumnLetter(idx));
+        const cleanedHeaders = (results.meta.fields || []).map((h: string) => h.trim());
+        const letters = cleanedHeaders.map((_, idx: number) => getExcelColumnLetter(idx));
         setData(cleaned);
         setHeaders(cleanedHeaders);
         setColLetters(letters);
@@ -134,7 +149,7 @@ export default function SpreadsheetComparator() {
   const columnComparisons = useMemo(() => {
     if (!data1 || !data2 || allHeaders.length === 0) return [];
 
-    return allHeaders.map((col, colIdx) => {
+    return allHeaders.map((col: string) => {
       const values1 = data1.map((row, idx) => ({ idx, val: String(row[col] ?? '').trim() }));
       const values2 = data2.map((row, idx) => ({ idx, val: String(row[col] ?? '').trim() }));
       
@@ -192,7 +207,7 @@ export default function SpreadsheetComparator() {
     return sortedColumns;
   }, [sortedColumns, hideIdentical]);
 
-  const getBarColor = (diffCount, totalRows) => {
+  const getBarColor = (diffCount: number, totalRows: number): string => {
     if (diffCount === 0) return 'bg-accent';
     const percentage = (diffCount / totalRows) * 100;
     if (percentage <= 10) return 'bg-accent/60';
@@ -202,13 +217,20 @@ export default function SpreadsheetComparator() {
   };
 
   const exportToCSV = () => {
+    interface DifferenceRow {
+      column: string;
+      rowIndex: number;
+      spreadsheet1: string;
+      spreadsheet2: string;
+      status: string;
+    }
     const columnsToExport = selectedExportColumns.length > 0 
       ? columnComparisons.filter(col => selectedExportColumns.includes(col.column))
       : columnComparisons;
     
-    const allDifferences = [];
-    columnsToExport.forEach(col => {
-      col.differences.forEach(diff => {
+    const allDifferences: DifferenceRow[] = [];
+    columnsToExport.forEach((col) => {
+      col.differences.forEach((diff) => {
         if (diff.status !== 'same') {
           allDifferences.push({
             column: col.column,
@@ -231,7 +253,7 @@ export default function SpreadsheetComparator() {
     setSelectedExportColumns([]);
   };
 
-  const toggleColumnSelection = (column) => {
+  const toggleColumnSelection = (column: string) => {
     setSelectedExportColumns(prev => 
       prev.includes(column) 
         ? prev.filter(c => c !== column)
@@ -336,7 +358,12 @@ export default function SpreadsheetComparator() {
               <Input 
                 type="file" 
                 accept=".csv,.xlsx,.xls"
-                onChange={(e) => e.target.files[0] && parseFile(e.target.files[0], setData1, setHeaders1, setColLetters1)}
+                onChange={(e: React.ChangeEvent<HTMLInputElement>) => {
+                  const files = e.target.files;
+                  if (files && files[0]) {
+                    parseFile(files[0], setData1, setHeaders1, setColLetters1);
+                  }
+                }}
                 className="mb-2 text-xs w-full"
               />
               <Textarea 
@@ -355,7 +382,12 @@ export default function SpreadsheetComparator() {
               <Input 
                 type="file" 
                 accept=".csv,.xlsx,.xls"
-                onChange={(e) => e.target.files[0] && parseFile(e.target.files[0], setData2, setHeaders2, setColLetters2)}
+                onChange={(e: React.ChangeEvent<HTMLInputElement>) => {
+                  const files = e.target.files;
+                  if (files && files[0]) {
+                    parseFile(files[0], setData2, setHeaders2, setColLetters2);
+                  }
+                }}
                 className="mb-2 text-xs w-full"
               />
               <Textarea 
@@ -461,11 +493,14 @@ export default function SpreadsheetComparator() {
                   <div>
                     <h3 className="font-semibold mb-3 text-sm flex items-center gap-2">
                       <span>Column: {selectedColumn}</span>
-                      {columnComparisons.find(c => c.column === selectedColumn)?.diffCount > 0 && (
-                        <span className="bg-accent/20 text-accent px-2 py-0.5 rounded text-xs">
-                          {columnComparisons.find(c => c.column === selectedColumn).diffCount} {columnComparisons.find(c => c.column === selectedColumn).diffCount === 1 ? 'difference' : 'differences'}
-                        </span>
-                      )}
+                      {(() => {
+                        const col = columnComparisons.find(c => c.column === selectedColumn);
+                        return col && col.diffCount > 0 ? (
+                          <span className="bg-accent/20 text-accent px-2 py-0.5 rounded text-xs">
+                            {col.diffCount} {col.diffCount === 1 ? 'difference' : 'differences'}
+                          </span>
+                        ) : null;
+                      })()}
                     </h3>
                     <div className="overflow-auto border rounded" style={{ maxHeight: 'calc(100vh - 400px)' }}>
                       <table className="w-full text-xs">
