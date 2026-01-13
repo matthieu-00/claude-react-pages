@@ -1051,7 +1051,7 @@ const PRDeploymentTracker = () => {
           <button
             onClick={addCards}
             disabled={!inputUrls.trim()}
-            className="bg-accent text-accent-foreground px-6 py-2 rounded-lg hover:bg-accent/90 disabled:bg-muted disabled:cursor-not-allowed flex items-center gap-2"
+            className="bg-accent text-accent-foreground dark:text-white px-6 py-2 rounded-lg hover:bg-accent/90 disabled:bg-muted disabled:cursor-not-allowed flex items-center gap-2"
           >
             <Plus size={20} />
             Add PRs to Tracker
@@ -1426,7 +1426,7 @@ const PRDeploymentTracker = () => {
             const columnCards = getCardsInColumn(column.id);
             return (
               <div key={column.id} className="bg-card rounded-lg border border-border shadow-sm">
-                <div className={`p-4 border-b border-border ${column.color} rounded-t-lg`}>
+                <div className={`p-4 border-b border-border dark:border-white ${column.color} rounded-t-lg`}>
                   <div className="flex items-center justify-between">
                     <div>
                       <h3 className="font-semibold text-foreground">{column.title}</h3>

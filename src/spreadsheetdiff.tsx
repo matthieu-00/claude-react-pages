@@ -312,9 +312,8 @@ export default function SpreadsheetComparator() {
   );
 
   return (
-    <PageContainer variant="muted" maxWidth="95vw">
-      <Card variant="elevated" padding="none">
-        <div className="p-4 border-b">
+    <PageContainer variant="default" maxWidth="95vw">
+        <div className="p-4">
           <div className="flex items-start justify-between gap-4">
             <PageHeader
               icon={FileSpreadsheet}
@@ -329,8 +328,8 @@ export default function SpreadsheetComparator() {
           </div>
         </div>
 
-          <div className="grid md:grid-cols-2 gap-0 border-b">
-            <div className="p-4 md:border-r">
+          <div className="grid md:grid-cols-2 gap-0">
+            <div className="p-4">
               <h3 className="font-semibold mb-2 text-sm flex items-center gap-2">
                 <div className="w-3 h-3 bg-accent rounded"></div> Spreadsheet 1
               </h3>
@@ -627,7 +626,6 @@ export default function SpreadsheetComparator() {
               </Card>
             </div>
           )}
-        </Card>
     </PageContainer>
   );
 }

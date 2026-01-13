@@ -3,7 +3,6 @@ import { Upload, Download, Search, X, CheckSquare, Square, Filter, HelpCircle, C
 import { useTheme } from '@/contexts/ThemeContext';
 import { PageContainer } from '@/components/ui/page-container';
 import { PageHeader } from '@/components/ui/page-header';
-import { Card } from '@/components/ui/card';
 import { Input, Textarea } from '@/components/ui/input';
 import { HelpTooltip } from '@/components/ui/help-tooltip';
 
@@ -744,7 +743,6 @@ export default function JsonExtractor() {
 
   return (
     <PageContainer variant="default" maxWidth="xl">
-      <Card variant="elevated-xl" padding="xl">
         <div className="flex items-start justify-between gap-4 mb-6">
           <PageHeader
             icon={Database}
@@ -1138,7 +1136,6 @@ export default function JsonExtractor() {
               <p className="text-xs md:text-sm mt-2 text-muted-foreground">Just copy and paste - the tool handles the rest!</p>
             </div>
           )}
-      </Card>
     </PageContainer>
   );
 }
