@@ -1,10 +1,11 @@
-import React, { useState, useRef } from 'react';
-import { Plus, ExternalLink, Copy, Check, MessageSquare, X, Trash2, GitBranch } from 'lucide-react';
+import React, { useState, useRef, useEffect, useMemo } from 'react';
+import { Plus, ExternalLink, Copy, Check, MessageSquare, X, Trash2, GitBranch, Search, Filter, BarChart3, Tag, Calendar, Flag, Archive, Download, FileText, FileJson } from 'lucide-react';
 import { PageContainer } from '@/components/ui/page-container';
 import { PageHeader } from '@/components/ui/page-header';
 import { Card } from '@/components/ui/card';
-import { Textarea } from '@/components/ui/input';
+import { Textarea, Input } from '@/components/ui/input';
 import { HelpTooltip } from '@/components/ui/help-tooltip';
+import { Button } from '@/components/ui/button';
 
 interface Card {
   id: number;
@@ -15,6 +16,11 @@ interface Card {
   notes: string[];
   isMultiSelect?: boolean;
   selectedIds?: number[];
+  tags?: string[];
+  priority?: 'low' | 'medium' | 'high' | 'urgent';
+  dueDate?: string;
+  archived?: boolean;
+  createdAt?: string;
 }
 
 interface DuplicateToast {
@@ -66,6 +72,17 @@ const PRDeploymentTracker = () => {
   const [showConflictModal, setShowConflictModal] = useState(false);
   const [conflictingPRs, setConflictingPRs] = useState<Conflict[]>([]);
   const [conflictResolutions, setConflictResolutions] = useState<Record<string, string | null>>({});
+  
+  // DT-EW-01, DT-EW-02, DT-EW-03, DT-EW-04, DT-EW-05, DT-EW-06: New state for easy wins
+  const [searchTerm, setSearchTerm] = useState('');
+  const [filterColumn, setFilterColumn] = useState<string | null>(null);
+  const [filterNotes, setFilterNotes] = useState('');
+  const [showStats, setShowStats] = useState(false);
+  const [showBulkMenu, setShowBulkMenu] = useState(false);
+  const [bulkNoteInput, setBulkNoteInput] = useState('');
+  const [bulkTitleInput, setBulkTitleInput] = useState('');
+  const [showBulkMoveMenu, setShowBulkMoveMenu] = useState(false);
+  const searchInputRef = useRef<HTMLInputElement>(null);
 
   const columns = [
     { id: 'yet-to-verify', title: 'Yet to Verify', color: 'bg-accent/10 border-accent/30' },
@@ -185,7 +202,8 @@ const PRDeploymentTracker = () => {
           ...firstVersion,
           id: Date.now() + Math.random(),
           column: resolution,
-          notes: allNotes
+          notes: allNotes,
+          createdAt: new Date().toISOString()
         }]);
       }
     });
@@ -258,7 +276,8 @@ const PRDeploymentTracker = () => {
             title: originalTitle,
             customTitle: customTitle,
             column: targetColumn.id,
-            notes: notes
+            notes: notes,
+            createdAt: new Date().toISOString()
           });
           
           totalCount++;
@@ -323,7 +342,8 @@ const PRDeploymentTracker = () => {
         title: originalTitle,
         customTitle: customTitle,
         column: targetColumn.id,
-        notes: notes
+        notes: notes,
+        createdAt: new Date().toISOString()
       });
     });
     
@@ -490,7 +510,8 @@ const PRDeploymentTracker = () => {
           title: extractPRNumber(url),
           customTitle: '',
           column: 'yet-to-verify',
-          notes: []
+          notes: [],
+          createdAt: new Date().toISOString()
         });
       } else {
         uniqueUrls.push(url);
@@ -505,7 +526,8 @@ const PRDeploymentTracker = () => {
         title: extractPRNumber(url),
         customTitle: '',
         column: 'yet-to-verify',
-        notes: []
+        notes: [],
+        createdAt: new Date().toISOString()
       }));
       
       setCards(prev => [...prev, ...newCards2]);
@@ -713,7 +735,7 @@ const PRDeploymentTracker = () => {
   };
 
   const getCardsInColumn = (columnId: string): Card[] => {
-    return cards.filter(card => card.column === columnId);
+    return filteredCards.filter(card => card.column === columnId);
   };
 
   const copyColumnUrls = async (columnId: string) => {
@@ -857,18 +879,230 @@ const PRDeploymentTracker = () => {
     setSelectedCards([]);
   };
 
-  // Add keyboard listener for Escape to clear selection
-  React.useEffect(() => {
+  // DT-EW-01: Search & Filter
+  const filteredCards = useMemo(() => {
+    let filtered = cards.filter(card => !card.archived);
+    
+    if (searchTerm) {
+      const searchLower = searchTerm.toLowerCase();
+      filtered = filtered.filter(card => {
+        const title = (card.customTitle || card.title).toLowerCase();
+        const url = card.url.toLowerCase();
+        const notes = card.notes.join(' ').toLowerCase();
+        return title.includes(searchLower) || url.includes(searchLower) || notes.includes(searchLower);
+      });
+    }
+    
+    if (filterColumn) {
+      filtered = filtered.filter(card => card.column === filterColumn);
+    }
+    
+    if (filterNotes) {
+      const notesLower = filterNotes.toLowerCase();
+      filtered = filtered.filter(card => 
+        card.notes.some(note => note.toLowerCase().includes(notesLower))
+      );
+    }
+    
+    return filtered;
+  }, [cards, searchTerm, filterColumn, filterNotes]);
+
+  const getCardsForColumn = (columnId: string) => {
+    return filteredCards.filter(card => card.column === columnId);
+  };
+
+  // DT-EW-02: Bulk Operations
+  const bulkMoveCards = (targetColumn: string) => {
+    if (selectedCards.length === 0) return;
+    
+    setCards(prev => prev.map(card => 
+      selectedCards.includes(card.id) 
+        ? { ...card, column: targetColumn }
+        : card
+    ));
+    showToast(`Moved ${selectedCards.length} card(s) to ${columns.find(c => c.id === targetColumn)?.title}`);
+    setSelectedCards([]);
+    setShowBulkMoveMenu(false);
+  };
+
+  const bulkAddNotes = () => {
+    if (selectedCards.length === 0 || !bulkNoteInput.trim()) return;
+    
+    setCards(prev => prev.map(card => 
+      selectedCards.includes(card.id)
+        ? { ...card, notes: [...(card.notes || []), bulkNoteInput.trim()] }
+        : card
+    ));
+    showToast(`Added note to ${selectedCards.length} card(s)`);
+    setBulkNoteInput('');
+    setShowBulkMenu(false);
+  };
+
+  const bulkDeleteCards = () => {
+    if (selectedCards.length === 0) return;
+    
+    setCards(prev => prev.filter(card => !selectedCards.includes(card.id)));
+    showToast(`Deleted ${selectedCards.length} card(s)`);
+    setSelectedCards([]);
+    setShowBulkMenu(false);
+  };
+
+  const bulkEditTitles = () => {
+    if (selectedCards.length === 0 || !bulkTitleInput.trim()) return;
+    
+    setCards(prev => prev.map(card => 
+      selectedCards.includes(card.id)
+        ? { ...card, customTitle: bulkTitleInput.trim() }
+        : card
+    ));
+    showToast(`Updated title for ${selectedCards.length} card(s)`);
+    setBulkTitleInput('');
+    setShowBulkMenu(false);
+  };
+
+  // DT-EW-03: Keyboard Shortcuts
+  useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
+      // Don't trigger shortcuts when typing in inputs/modals
+      if ((e.target as HTMLElement).tagName === 'INPUT' || 
+          (e.target as HTMLElement).tagName === 'TEXTAREA' ||
+          (e.target as HTMLElement).closest('[role="dialog"]')) {
+        // Ctrl+F to focus search
+        if ((e.ctrlKey || e.metaKey) && e.key === 'f') {
+          e.preventDefault();
+          searchInputRef.current?.focus();
+          return;
+        }
+        return;
+      }
+      
+      // Ctrl+F to focus search
+      if ((e.ctrlKey || e.metaKey) && e.key === 'f') {
+        e.preventDefault();
+        searchInputRef.current?.focus();
+        return;
+      }
+      
+      // Delete to delete selected cards
+      if (e.key === 'Delete' && selectedCards.length > 0) {
+        e.preventDefault();
+        bulkDeleteCards();
+        return;
+      }
+      
+      // Ctrl+A to select all cards
+      if ((e.ctrlKey || e.metaKey) && e.key === 'a') {
+        e.preventDefault();
+        setSelectedCards(filteredCards.map(card => card.id));
+        return;
+      }
+      
+      // Arrow keys to move selected cards between columns
+      if (selectedCards.length > 0 && (e.key === 'ArrowLeft' || e.key === 'ArrowRight')) {
+        e.preventDefault();
+        const currentColumn = filteredCards.find(card => selectedCards.includes(card.id))?.column;
+        if (!currentColumn) return;
+        
+        const currentIndex = columns.findIndex(col => col.id === currentColumn);
+        if (currentIndex === -1) return;
+        
+        let targetIndex = currentIndex;
+        if (e.key === 'ArrowLeft' && currentIndex > 0) {
+          targetIndex = currentIndex - 1;
+        } else if (e.key === 'ArrowRight' && currentIndex < columns.length - 1) {
+          targetIndex = currentIndex + 1;
+        }
+        
+        if (targetIndex !== currentIndex) {
+          bulkMoveCards(columns[targetIndex].id);
+        }
+        return;
+      }
+      
+      // Escape to clear selection
       if (e.key === 'Escape' && selectedCards.length > 0) {
         clearSelection();
         showToast('Selection cleared');
+        return;
       }
     };
     
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [selectedCards]);
+  }, [selectedCards, filteredCards, columns]);
+
+  // DT-EW-05: Statistics Dashboard
+  const statistics = useMemo(() => {
+    const cardsPerColumn: Record<string, number> = {};
+    columns.forEach(col => {
+      cardsPerColumn[col.id] = getCardsForColumn(col.id).length;
+    });
+    
+    const totalCards = cards.length;
+    const cardsWithNotes = cards.filter(card => card.notes && card.notes.length > 0).length;
+    const cardsWithNotesPercentage = totalCards > 0 ? (cardsWithNotes / totalCards) * 100 : 0;
+    
+    const recentlyAdded = cards
+      .filter(card => card.createdAt)
+      .sort((a, b) => {
+        const dateA = new Date(a.createdAt || 0).getTime();
+        const dateB = new Date(b.createdAt || 0).getTime();
+        return dateB - dateA;
+      })
+      .slice(0, 5);
+    
+    return {
+      cardsPerColumn,
+      totalCards,
+      cardsWithNotes,
+      cardsWithNotesPercentage,
+      recentlyAdded,
+    };
+  }, [cards, columns, filteredCards]);
+
+  // DT-EW-06: Export Enhancements
+  const exportFilteredJSON = () => {
+    const data = {
+      exportDate: new Date().toISOString(),
+      cards: filteredCards,
+      filters: {
+        searchTerm,
+        filterColumn,
+        filterNotes,
+      },
+    };
+    const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'deployment-tracker-export.json';
+    a.click();
+    URL.revokeObjectURL(url);
+    showToast('Exported to JSON');
+  };
+
+  const exportMarkdownTable = () => {
+    let markdown = `# Deployment Tracker Export\n\n`;
+    markdown += `Generated: ${new Date().toLocaleString()}\n\n`;
+    markdown += `| Column | Title | URL | Notes |\n`;
+    markdown += `|--------|-------|-----|-------|\n`;
+    
+    filteredCards.forEach(card => {
+      const columnName = columns.find(col => col.id === card.column)?.title || card.column;
+      const title = card.customTitle || card.title;
+      const notes = card.notes.join('; ') || '-';
+      markdown += `| ${columnName} | ${title} | ${card.url} | ${notes} |\n`;
+    });
+    
+    const blob = new Blob([markdown], { type: 'text/markdown' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'deployment-tracker-export.md';
+    a.click();
+    URL.revokeObjectURL(url);
+    showToast('Exported to Markdown');
+  };
 
   const copyFullStatusReport = async () => {
     const now = new Date();
@@ -1313,22 +1547,233 @@ const PRDeploymentTracker = () => {
           </div>
         )}
 
-        {/* Export All Button */}
-        <div className="mb-6 flex justify-end gap-3">
-          <button
-            onClick={() => setShowReleaseModal(true)}
-            className="bg-muted-foreground text-foreground px-4 py-2 rounded-lg hover:bg-muted-foreground/90 transition-colors flex items-center gap-2 text-sm"
-          >
-            <Copy size={16} />
-            Copy Release List
-          </button>
-          <button
-            onClick={() => setShowExportModal(true)}
-            className="bg-accent text-accent-foreground px-6 py-3 rounded-lg hover:bg-accent/90 transition-colors flex items-center gap-2 shadow-md"
-          >
-            <Copy size={20} />
-            Copy Full Status Report
-          </button>
+        {/* DT-EW-05: Statistics Dashboard */}
+        {showStats && (
+          <Card variant="elevated" padding="md" className="mb-6">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="font-semibold flex items-center gap-2">
+                <BarChart3 className="w-5 h-5" />
+                Statistics Dashboard
+              </h3>
+              <Button variant="outline" size="sm" onClick={() => setShowStats(false)}>
+                <X className="w-4 h-4" />
+              </Button>
+            </div>
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">
+              <div className="p-3 bg-muted rounded">
+                <div className="text-xs text-muted-foreground mb-1">Total Cards</div>
+                <div className="text-2xl font-bold">{statistics.totalCards}</div>
+              </div>
+              <div className="p-3 bg-muted rounded">
+                <div className="text-xs text-muted-foreground mb-1">Cards with Notes</div>
+                <div className="text-2xl font-bold">{statistics.cardsWithNotes}</div>
+                <div className="text-xs text-muted-foreground">{statistics.cardsWithNotesPercentage.toFixed(1)}%</div>
+              </div>
+              {columns.slice(0, 2).map(col => (
+                <div key={col.id} className="p-3 bg-muted rounded">
+                  <div className="text-xs text-muted-foreground mb-1 truncate">{col.title}</div>
+                  <div className="text-2xl font-bold">{statistics.cardsPerColumn[col.id] || 0}</div>
+                </div>
+              ))}
+            </div>
+            {statistics.recentlyAdded.length > 0 && (
+              <div>
+                <div className="text-xs text-muted-foreground mb-2">Recently Added:</div>
+                <div className="flex flex-wrap gap-2">
+                  {statistics.recentlyAdded.map(card => (
+                    <span key={card.id} className="text-xs px-2 py-1 bg-accent/10 rounded">
+                      {card.customTitle || card.title}
+                    </span>
+                  ))}
+                </div>
+              </div>
+            )}
+          </Card>
+        )}
+        
+        {!showStats && (
+          <div className="mb-6">
+            <Button variant="outline" size="sm" onClick={() => setShowStats(true)}>
+              <BarChart3 className="w-4 h-4 mr-2" />
+              Show Statistics
+            </Button>
+          </div>
+        )}
+
+        {/* DT-EW-01: Search & Filter */}
+        <Card variant="elevated" padding="md" className="mb-6">
+          <div className="space-y-4">
+            <div className="flex flex-col md:flex-row gap-3">
+              <div className="flex-1 relative">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                <Input
+                  ref={searchInputRef}
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                  placeholder="Search cards by title, URL, or notes... (Ctrl+F)"
+                  className="pl-10"
+                />
+              </div>
+              <div className="flex gap-2">
+                <select
+                  value={filterColumn || ''}
+                  onChange={(e) => setFilterColumn(e.target.value || null)}
+                  className="px-3 py-2 rounded border border-border bg-background text-foreground text-sm"
+                >
+                  <option value="">All Columns</option>
+                  {columns.map(col => (
+                    <option key={col.id} value={col.id}>{col.title}</option>
+                  ))}
+                </select>
+                <Input
+                  value={filterNotes}
+                  onChange={(e) => setFilterNotes(e.target.value)}
+                  placeholder="Filter by notes..."
+                  className="w-48"
+                />
+                {(searchTerm || filterColumn || filterNotes) && (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => {
+                      setSearchTerm('');
+                      setFilterColumn(null);
+                      setFilterNotes('');
+                    }}
+                  >
+                    <X className="w-4 h-4" />
+                  </Button>
+                )}
+              </div>
+            </div>
+            
+            {/* DT-EW-02: Bulk Operations */}
+            {selectedCards.length > 0 && (
+              <div className="flex items-center gap-2 flex-wrap p-3 bg-muted rounded-lg">
+                <span className="text-sm font-medium">{selectedCards.length} card(s) selected</span>
+                <div className="flex gap-2 flex-wrap">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setShowBulkMoveMenu(!showBulkMoveMenu)}
+                  >
+                    Move
+                  </Button>
+                  {showBulkMoveMenu && (
+                    <div className="absolute mt-10 bg-card border rounded-md shadow-lg z-50 p-2">
+                      {columns.map(col => (
+                        <button
+                          key={col.id}
+                          onClick={() => bulkMoveCards(col.id)}
+                          className="block w-full text-left px-3 py-2 hover:bg-muted rounded text-sm"
+                        >
+                          {col.title}
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setShowBulkMenu(!showBulkMenu)}
+                  >
+                    Bulk Actions
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={clearSelection}
+                  >
+                    Clear Selection
+                  </Button>
+                </div>
+              </div>
+            )}
+            
+            {showBulkMenu && selectedCards.length > 0 && (
+              <Card variant="elevated" padding="md" className="bg-muted/50">
+                <div className="space-y-3">
+                  <div>
+                    <label className="text-sm font-medium mb-1 block">Add Note to Selected Cards</label>
+                    <div className="flex gap-2">
+                      <Input
+                        value={bulkNoteInput}
+                        onChange={(e) => setBulkNoteInput(e.target.value)}
+                        placeholder="Enter note..."
+                        className="flex-1"
+                      />
+                      <Button onClick={bulkAddNotes} disabled={!bulkNoteInput.trim()}>
+                        Add
+                      </Button>
+                    </div>
+                  </div>
+                  <div>
+                    <label className="text-sm font-medium mb-1 block">Set Title for Selected Cards</label>
+                    <div className="flex gap-2">
+                      <Input
+                        value={bulkTitleInput}
+                        onChange={(e) => setBulkTitleInput(e.target.value)}
+                        placeholder="Enter title..."
+                        className="flex-1"
+                      />
+                      <Button onClick={bulkEditTitles} disabled={!bulkTitleInput.trim()}>
+                        Set
+                      </Button>
+                    </div>
+                  </div>
+                  <div className="flex gap-2">
+                    <Button variant="destructive" onClick={bulkDeleteCards}>
+                      <Trash2 className="w-4 h-4 mr-2" />
+                      Delete Selected
+                    </Button>
+                    <Button variant="outline" onClick={() => setShowBulkMenu(false)}>
+                      Close
+                    </Button>
+                  </div>
+                </div>
+              </Card>
+            )}
+          </div>
+        </Card>
+
+        {/* Export Menu */}
+        <div className="mb-6 flex justify-end">
+          <div className="relative group">
+            <Button variant="outline" size="sm">
+              <Download className="w-4 h-4 mr-2" />
+              Export
+            </Button>
+            <div className="absolute top-full right-0 mt-1 bg-card border rounded-md shadow-lg opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all z-50 min-w-[200px]">
+              <button
+                onClick={() => setShowReleaseModal(true)}
+                className="w-full text-left px-3 py-2 text-sm hover:bg-muted flex items-center gap-2"
+              >
+                <Copy className="w-4 h-4" />
+                Copy Release List
+              </button>
+              <button
+                onClick={() => setShowExportModal(true)}
+                className="w-full text-left px-3 py-2 text-sm hover:bg-muted flex items-center gap-2"
+              >
+                <Copy className="w-4 h-4" />
+                Copy Full Status Report
+              </button>
+              <button
+                onClick={exportFilteredJSON}
+                className="w-full text-left px-3 py-2 text-sm hover:bg-muted flex items-center gap-2"
+              >
+                <FileJson className="w-4 h-4" />
+                Export JSON
+              </button>
+              <button
+                onClick={exportMarkdownTable}
+                className="w-full text-left px-3 py-2 text-sm hover:bg-muted flex items-center gap-2"
+              >
+                <FileText className="w-4 h-4" />
+                Export Markdown
+              </button>
+            </div>
+          </div>
         </div>
 
         {/* Release List Modal */}

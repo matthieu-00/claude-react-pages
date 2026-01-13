@@ -1,10 +1,11 @@
-import { useState, useMemo, useEffect } from 'react';
-import { Upload, Download, Search, X, CheckSquare, Square, Filter, ChevronDown, ChevronRight, RefreshCw, Database } from 'lucide-react';
+import { useState, useMemo, useEffect, useRef } from 'react';
+import { Upload, Download, Search, X, CheckSquare, Square, Filter, ChevronDown, ChevronRight, RefreshCw, Database, Copy, Check, ArrowUp, ArrowDown, Link2, BarChart3, FileText } from 'lucide-react';
 import { useTheme } from '@/contexts/ThemeContext';
 import { PageContainer } from '@/components/ui/page-container';
 import { PageHeader } from '@/components/ui/page-header';
 import { Textarea } from '@/components/ui/input';
 import { HelpTooltip } from '@/components/ui/help-tooltip';
+import { Button } from '@/components/ui/button';
 
 type JsonValue = string | number | boolean | null | JsonObject | JsonValue[];
 interface JsonObject extends Record<string, JsonValue> {}
@@ -38,6 +39,16 @@ export default function JsonExtractor() {
   const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(new Set());
   const [previewCount, setPreviewCount] = useState(3);
   const [exportMode, setExportMode] = useState<'all' | 'common' | 'differences'>('all');
+  
+  // JE-EW-01, JE-EW-02, JE-EW-03, JE-EW-05: New state for easy wins
+  const [sortColumn, setSortColumn] = useState<string | null>(null);
+  const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('asc');
+  const [rowFilters, setRowFilters] = useState<Record<string, { type: 'contains' | 'exact' | 'range'; value: string; min?: number; max?: number }>>({});
+  const [expandedCells, setExpandedCells] = useState<Set<string>>(new Set());
+  const [copiedField, setCopiedField] = useState<string | null>(null);
+  const [showStats, setShowStats] = useState(true);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [dragActive, setDragActive] = useState(false);
 
   const parseConsoleFormat = (text: string): JsonObject => {
     const lines = text.split('\n').map((line: string) => line.trim()).filter((line: string) => line);
@@ -413,10 +424,11 @@ export default function JsonExtractor() {
     setSelectedKeys(newSelected);
   };
 
+  // JE-EW-02: Data Filtering & JE-EW-03: Sorting
   const filteredData = useMemo<JsonObject[]>(() => {
     if (selectedKeys.size === 0) return [];
     
-    return jsonData.map((item: JsonObject) => {
+    let data = jsonData.map((item: JsonObject) => {
       const filtered: JsonObject = {} as JsonObject;
       Array.from(selectedKeys).sort().forEach((key: string) => {
         if (key in item) {
@@ -425,7 +437,49 @@ export default function JsonExtractor() {
       });
       return filtered;
     });
-  }, [jsonData, selectedKeys]);
+    
+    // Apply row filters
+    if (Object.keys(rowFilters).length > 0) {
+      data = data.filter((item: JsonObject) => {
+        return Object.entries(rowFilters).every(([key, filter]) => {
+          const value = item[key];
+          if (value === null || value === undefined) return false;
+          
+          if (filter.type === 'contains') {
+            return String(value).toLowerCase().includes(filter.value.toLowerCase());
+          } else if (filter.type === 'exact') {
+            return String(value) === filter.value;
+          } else if (filter.type === 'range' && typeof value === 'number') {
+            const num = Number(value);
+            return (!filter.min || num >= filter.min) && (!filter.max || num <= filter.max);
+          }
+          return true;
+        });
+      });
+    }
+    
+    // Apply sorting
+    if (sortColumn) {
+      data = [...data].sort((a, b) => {
+        const aVal = a[sortColumn];
+        const bVal = b[sortColumn];
+        
+        if (aVal === null || aVal === undefined) return 1;
+        if (bVal === null || bVal === undefined) return -1;
+        
+        let comparison = 0;
+        if (typeof aVal === 'number' && typeof bVal === 'number') {
+          comparison = aVal - bVal;
+        } else {
+          comparison = String(aVal).localeCompare(String(bVal));
+        }
+        
+        return sortDirection === 'asc' ? comparison : -comparison;
+      });
+    }
+    
+    return data;
+  }, [jsonData, selectedKeys, rowFilters, sortColumn, sortDirection]);
 
   const filteredDataB = useMemo<JsonObject[]>(() => {
     if (mode !== 'compare' || selectedKeys.size === 0) return [];
@@ -450,6 +504,120 @@ export default function JsonExtractor() {
     if (Array.isArray(value)) return 'hsl(var(--type-array))';
     if (type === 'object') return 'hsl(var(--type-object))';
     return 'hsl(var(--muted-foreground))';
+  };
+
+  // JE-EW-01: Field Operations
+  const copyFieldPath = async (fieldPath: string) => {
+    await navigator.clipboard.writeText(fieldPath);
+    setCopiedField(fieldPath);
+    setTimeout(() => setCopiedField(null), 2000);
+  };
+
+  const copyFieldValue = async (value: JsonValue) => {
+    const text = value === null || value === undefined ? 'null' : typeof value === 'object' ? JSON.stringify(value) : String(value);
+    await navigator.clipboard.writeText(text);
+    setCopiedField('value');
+    setTimeout(() => setCopiedField(null), 2000);
+  };
+
+  const handleSort = (column: string) => {
+    if (sortColumn === column) {
+      setSortDirection(sortDirection === 'asc' ? 'desc' : 'asc');
+    } else {
+      setSortColumn(column);
+      setSortDirection('asc');
+    }
+  };
+
+  // JE-EW-04: Statistics Dashboard
+  const fieldStatistics = useMemo(() => {
+    if (mode === 'compare' || selectedKeys.size === 0) return {};
+    
+    const stats: Record<string, {
+      min?: number;
+      max?: number;
+      avg?: number;
+      uniqueCount: number;
+      nullCount: number;
+      totalCount: number;
+      nullPercentage: number;
+    }> = {};
+    
+    Array.from(selectedKeys).forEach((key: string) => {
+      const values = jsonData.map(item => item[key]).filter(v => v !== null && v !== undefined);
+      const numericValues = values.filter(v => typeof v === 'number') as number[];
+      const uniqueValues = new Set(values.map(v => JSON.stringify(v)));
+      
+      const stat: typeof stats[string] = {
+        uniqueCount: uniqueValues.size,
+        nullCount: jsonData.length - values.length,
+        totalCount: jsonData.length,
+        nullPercentage: ((jsonData.length - values.length) / jsonData.length) * 100,
+      };
+      
+      if (numericValues.length > 0) {
+        stat.min = Math.min(...numericValues);
+        stat.max = Math.max(...numericValues);
+        stat.avg = numericValues.reduce((a, b) => a + b, 0) / numericValues.length;
+      }
+      
+      stats[key] = stat;
+    });
+    
+    return stats;
+  }, [jsonData, selectedKeys, mode]);
+
+  const dataQualityScore = useMemo(() => {
+    if (selectedKeys.size === 0) return 0;
+    const scores = Object.values(fieldStatistics).map(stat => 100 - stat.nullPercentage);
+    return scores.length > 0 ? scores.reduce((a, b) => a + b, 0) / scores.length : 0;
+  }, [fieldStatistics, selectedKeys]);
+
+  // JE-EW-06: Import Options
+  const handleFileDrop = async (e: React.DragEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    setDragActive(false);
+    const file = e.dataTransfer.files[0];
+    if (file && (file.type === 'application/json' || file.name.endsWith('.json'))) {
+      const text = await file.text();
+      try {
+        const parsed = JSON.parse(text);
+        const dataArray = Array.isArray(parsed) ? parsed : [parsed];
+        setJsonData(dataArray as JsonObject[]);
+        const keySet = new Set<string>();
+        dataArray.forEach((item: JsonObject) => {
+          if (typeof item === 'object' && item !== null) {
+            Object.keys(item).forEach(key => keySet.add(key));
+          }
+        });
+        setAllKeys(Array.from(keySet).sort());
+        setSelectedKeys(new Set(Array.from(keySet)));
+        setError('');
+      } catch (err) {
+        setError('Failed to parse JSON file');
+      }
+    }
+  };
+
+  const importFromURL = async (url: string) => {
+    try {
+      const response = await fetch(url);
+      const text = await response.text();
+      const parsed = JSON.parse(text);
+      const dataArray = Array.isArray(parsed) ? parsed : [parsed];
+      setJsonData(dataArray as JsonObject[]);
+      const keySet = new Set<string>();
+      dataArray.forEach((item: JsonObject) => {
+        if (typeof item === 'object' && item !== null) {
+          Object.keys(item).forEach(key => keySet.add(key));
+        }
+      });
+      setAllKeys(Array.from(keySet).sort());
+      setSelectedKeys(new Set(Array.from(keySet)));
+      setError('');
+    } catch (err) {
+      setError('Failed to import from URL');
+    }
   };
 
   const exportToCSV = () => {
@@ -811,14 +979,78 @@ export default function JsonExtractor() {
           {/* Paste Areas */}
           {mode === 'extract' ? (
             <div className="mb-6">
-              <label className="block text-sm font-medium mb-2 text-muted-foreground">
-                Paste Your Data Here
-              </label>
-              <Textarea
-                onChange={(e) => handlePaste(e, false)}
-                placeholder='Paste your JSON data here...'
-                className="h-32 md:h-40 font-mono"
-              />
+              <div className="flex items-center justify-between mb-2">
+                <label className="block text-sm font-medium text-muted-foreground">
+                  Paste Your Data Here
+                </label>
+                <div className="flex gap-2">
+                  {/* JE-EW-06: Import from URL */}
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => {
+                      const url = prompt('Enter JSON URL:');
+                      if (url) importFromURL(url);
+                    }}
+                  >
+                    <Link2 className="w-4 h-4 mr-2" />
+                    Import URL
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => fileInputRef.current?.click()}
+                  >
+                    <FileText className="w-4 h-4 mr-2" />
+                    Import File
+                  </Button>
+                  <input
+                    ref={fileInputRef}
+                    type="file"
+                    accept=".json"
+                    className="hidden"
+                    onChange={async (e) => {
+                      const file = e.target.files?.[0];
+                      if (file) {
+                        const text = await file.text();
+                        try {
+                          const parsed = JSON.parse(text);
+                          const dataArray = Array.isArray(parsed) ? parsed : [parsed];
+                          setJsonData(dataArray as JsonObject[]);
+                          const keySet = new Set<string>();
+                          dataArray.forEach((item: JsonObject) => {
+                            if (typeof item === 'object' && item !== null) {
+                              Object.keys(item).forEach(key => keySet.add(key));
+                            }
+                          });
+                          setAllKeys(Array.from(keySet).sort());
+                          setSelectedKeys(new Set(Array.from(keySet)));
+                          setError('');
+                        } catch (err) {
+                          setError('Failed to parse JSON file');
+                        }
+                      }
+                    }}
+                  />
+                </div>
+              </div>
+              <div
+                onDragOver={(e) => {
+                  e.preventDefault();
+                  setDragActive(true);
+                }}
+                onDragLeave={() => setDragActive(false)}
+                onDrop={handleFileDrop}
+                className={`border-2 border-dashed rounded-lg p-4 transition-colors ${
+                  dragActive ? 'border-accent bg-accent/10' : 'border-border'
+                }`}
+              >
+                <Textarea
+                  onChange={(e) => handlePaste(e, false)}
+                  placeholder='Paste your JSON data here or drag & drop a JSON file...'
+                  className="h-32 md:h-40 font-mono"
+                />
+              </div>
               {error && (
                 <p className="mt-2 text-sm text-destructive">{error}</p>
               )}
@@ -886,6 +1118,46 @@ export default function JsonExtractor() {
                   <div className="text-lg md:text-2xl font-bold text-foreground">{selectedKeys.size}</div>
                 </div>
               </div>
+
+              {/* JE-EW-04: Statistics Dashboard */}
+              {showStats && mode === 'extract' && selectedKeys.size > 0 && (
+                <div className="mb-6">
+                  <div className="flex items-center justify-between mb-3">
+                    <h3 className="text-base md:text-lg font-semibold text-foreground flex items-center gap-2">
+                      <BarChart3 className="w-5 h-5" />
+                      Statistics Dashboard
+                    </h3>
+                    <Button variant="outline" size="sm" onClick={() => setShowStats(false)}>
+                      <X className="w-4 h-4" />
+                    </Button>
+                  </div>
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3 mb-4">
+                    <div className="rounded-lg p-4 bg-card border border-border">
+                      <div className="text-xs text-muted-foreground mb-1">Data Quality Score</div>
+                      <div className="text-2xl font-bold text-foreground">{dataQualityScore.toFixed(1)}%</div>
+                    </div>
+                    {Object.entries(fieldStatistics).slice(0, 3).map(([key, stat]) => (
+                      <div key={key} className="rounded-lg p-4 bg-card border border-border">
+                        <div className="text-xs text-muted-foreground mb-2 truncate" title={key}>{key}</div>
+                        <div className="space-y-1 text-xs">
+                          {stat.min !== undefined && (
+                            <div>Min: {stat.min.toFixed(2)} | Max: {stat.max!.toFixed(2)}</div>
+                          )}
+                          {stat.avg !== undefined && <div>Avg: {stat.avg.toFixed(2)}</div>}
+                          <div>Unique: {stat.uniqueCount} | Null: {stat.nullPercentage.toFixed(1)}%</div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+              
+              {!showStats && mode === 'extract' && (
+                <Button variant="outline" size="sm" onClick={() => setShowStats(true)} className="mb-4">
+                  <BarChart3 className="w-4 h-4 mr-2" />
+                  Show Statistics
+                </Button>
+              )}
 
               <div className="flex flex-col md:flex-row gap-3 mb-4">
                 <div className="flex-1 relative">
@@ -1111,16 +1383,42 @@ export default function JsonExtractor() {
                             <th className="px-3 py-2 text-left font-semibold sticky left-0 z-10 bg-muted text-foreground">
                               Record
                             </th>
-                            {Array.from(selectedKeys).sort().map(key => (
-                              <th key={key} className="px-3 py-2 text-left font-semibold whitespace-nowrap text-foreground">
-                                {key}
-                              </th>
-                            ))}
+                            {Array.from(selectedKeys).sort().map(key => {
+                              const isSorted = sortColumn === key;
+                              return (
+                                <th 
+                                  key={key} 
+                                  className="px-3 py-2 text-left font-semibold whitespace-nowrap text-foreground cursor-pointer hover:bg-muted/50 select-none"
+                                  onClick={() => handleSort(key)}
+                                >
+                                  <div className="flex items-center gap-2">
+                                    <span>{key}</span>
+                                    {isSorted && (
+                                      sortDirection === 'asc' ? <ArrowUp className="w-3 h-3" /> : <ArrowDown className="w-3 h-3" />
+                                    )}
+                                    <button
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        copyFieldPath(key);
+                                      }}
+                                      className="opacity-0 group-hover:opacity-100 hover:opacity-100"
+                                      title="Copy field path"
+                                    >
+                                      {copiedField === key ? (
+                                        <Check className="w-3 h-3 text-green-500" />
+                                      ) : (
+                                        <Copy className="w-3 h-3" />
+                                      )}
+                                    </button>
+                                  </div>
+                                </th>
+                              );
+                            })}
                           </tr>
                         </thead>
                         <tbody>
                           {filteredData.slice(0, previewCount).map((record, idx) => (
-                            <tr key={idx} className="border-b border-border">
+                            <tr key={idx} className="border-b border-border group">
                               <td className="px-3 py-2 font-semibold sticky left-0 z-10 bg-muted text-muted-foreground">
                                 #{idx + 1}
                               </td>
@@ -1131,15 +1429,49 @@ export default function JsonExtractor() {
                                   typeof value === 'object' ? 
                                     JSON.stringify(value) : 
                                     String(value);
+                                const cellId = `${idx}-${key}`;
+                                const isExpanded = expandedCells.has(cellId);
+                                const shouldTruncate = displayValue.length > 50;
                                 
                                 return (
                                   <td 
                                     key={key} 
-                                    className="px-3 py-2 whitespace-nowrap"
+                                    className="px-3 py-2 whitespace-nowrap relative group/cell"
                                     style={{ color: getTypeColor(value) }}
                                     title={`Type: ${typeof value}`}
                                   >
-                                    {displayValue.length > 50 ? displayValue.substring(0, 50) + '...' : displayValue}
+                                    <div className="flex items-center gap-2">
+                                      <span 
+                                        className={shouldTruncate && !isExpanded ? 'cursor-pointer' : ''}
+                                        onClick={() => {
+                                          if (shouldTruncate) {
+                                            const newExpanded = new Set(expandedCells);
+                                            if (isExpanded) {
+                                              newExpanded.delete(cellId);
+                                            } else {
+                                              newExpanded.add(cellId);
+                                            }
+                                            setExpandedCells(newExpanded);
+                                          }
+                                        }}
+                                      >
+                                        {shouldTruncate && !isExpanded ? displayValue.substring(0, 50) + '...' : displayValue}
+                                      </span>
+                                      <button
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          copyFieldValue(value);
+                                        }}
+                                        className="opacity-0 group-hover/cell:opacity-100 hover:opacity-100"
+                                        title="Copy value"
+                                      >
+                                        {copiedField === 'value' ? (
+                                          <Check className="w-3 h-3 text-green-500" />
+                                        ) : (
+                                          <Copy className="w-3 h-3" />
+                                        )}
+                                      </button>
+                                    </div>
                                   </td>
                                 );
                               })}

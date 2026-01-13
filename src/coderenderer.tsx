@@ -1,10 +1,11 @@
-import React, { useState, useEffect } from 'react';
-import { Play, AlertCircle, Copy, Check, Upload, Terminal, Maximize2, Minimize2, RotateCcw, X, Code } from 'lucide-react';
+import React, { useState, useEffect, useRef } from 'react';
+import { Play, AlertCircle, Copy, Check, Upload, Terminal, Maximize2, Minimize2, RotateCcw, X, Code, Download, Share2, Save, FileText, Type, WrapText, ZoomIn, ZoomOut, Search, Settings } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { PageHeader } from '@/components/ui/page-header';
 import { Card } from '@/components/ui/card';
 import { HelpTooltip } from '@/components/ui/help-tooltip';
+import { Input } from '@/components/ui/input';
 
 interface LogEntry {
   type: string;
@@ -82,10 +83,359 @@ window.customAlert = function() {
   alert('Hello from vanilla JS!');
 };`
   });
+  
+  // CR-EW-01: Keyboard Shortcuts & CR-EW-06: Editor Enhancements state
+  const [showLineNumbers, setShowLineNumbers] = useState(true);
+  const [wordWrap, setWordWrap] = useState(false);
+  const [fontSize, setFontSize] = useState(14);
+  const [showFindDialog, setShowFindDialog] = useState(false);
+  const [findTerm, setFindTerm] = useState('');
+  const [showSnippetsMenu, setShowSnippetsMenu] = useState(false);
+  const [snippets, setSnippets] = useState<Record<string, { name: string; code: string; mode: 'tsx' | 'html' | 'combined' }>>({});
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const [prettierReady, setPrettierReady] = useState(false);
 
   const addLog = (type: string, message: string) => {
     setLogs(prev => [...prev, { type, message, timestamp: new Date().toLocaleTimeString() }]);
   };
+
+  // CR-EW-01: Keyboard Shortcuts
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      // Don't trigger shortcuts when typing in inputs/modals
+      if ((e.target as HTMLElement).tagName === 'INPUT' || (e.target as HTMLElement).tagName === 'TEXTAREA') {
+        const target = e.target as HTMLElement;
+        if (target.closest('[role="dialog"]') || target.closest('.modal')) return;
+        
+        // Ctrl+F for find (only if not already in find dialog)
+        if ((e.ctrlKey || e.metaKey) && e.key === 'f' && !showFindDialog) {
+          e.preventDefault();
+          setShowFindDialog(true);
+          return;
+        }
+        
+        // Ctrl+/ to toggle comment (simple implementation)
+        if ((e.ctrlKey || e.metaKey) && e.key === '/') {
+          e.preventDefault();
+          const textarea = textareaRef.current;
+          if (!textarea) return;
+          
+          const start = textarea.selectionStart;
+          const end = textarea.selectionEnd;
+          const currentCode = renderMode === 'combined' ? combinedCode[activeEditorTab as keyof CombinedCode] : code;
+          const selectedText = currentCode.substring(start, end);
+          const lines = currentCode.split('\n');
+          const startLine = currentCode.substring(0, start).split('\n').length - 1;
+          const endLine = currentCode.substring(0, end).split('\n').length - 1;
+          
+          let newCode = currentCode;
+          let newStart = start;
+          let newEnd = end;
+          
+          if (selectedText.includes('\n')) {
+            // Multi-line comment toggle
+            const allCommented = lines.slice(startLine, endLine + 1).every(line => line.trim().startsWith('//'));
+            lines.slice(startLine, endLine + 1).forEach((line, idx) => {
+              const actualIdx = startLine + idx;
+              if (allCommented) {
+                lines[actualIdx] = line.replace(/^(\s*)\/\/\s?/, '$1');
+              } else {
+                lines[actualIdx] = line.replace(/^(\s*)/, '$1// ');
+              }
+            });
+            newCode = lines.join('\n');
+            const prefixLength = lines.slice(0, startLine).join('\n').length + (startLine > 0 ? 1 : 0);
+            newStart = prefixLength + lines[startLine].length - currentCode.split('\n')[startLine].length;
+            newEnd = prefixLength + lines.slice(startLine, endLine + 1).join('\n').length - (endLine > startLine ? 1 : 0);
+          } else {
+            // Single line comment toggle
+            const lineStart = currentCode.lastIndexOf('\n', start - 1) + 1;
+            const lineEnd = currentCode.indexOf('\n', end);
+            const line = lineEnd === -1 ? currentCode.substring(lineStart) : currentCode.substring(lineStart, lineEnd);
+            const trimmed = line.trim();
+            if (trimmed.startsWith('//')) {
+              const newLine = line.replace(/^(\s*)\/\/\s?/, '$1');
+              newCode = currentCode.substring(0, lineStart) + newLine + currentCode.substring(lineEnd === -1 ? currentCode.length : lineEnd);
+              newStart = start - 2;
+              newEnd = end - 2;
+            } else {
+              const indent = line.match(/^\s*/)?.[0] || '';
+              const newLine = indent + '// ' + trimmed;
+              newCode = currentCode.substring(0, lineStart) + newLine + currentCode.substring(lineEnd === -1 ? currentCode.length : lineEnd);
+              newStart = start + 3;
+              newEnd = end + 3;
+            }
+          }
+          
+          if (renderMode === 'combined') {
+            updateCombinedCode(activeEditorTab as keyof CombinedCode, newCode);
+          } else {
+            setCode(newCode);
+          }
+          
+          setTimeout(() => {
+            textarea.setSelectionRange(newStart, newEnd);
+            textarea.focus();
+          }, 0);
+          return;
+        }
+      }
+      
+      // Global shortcuts
+      if ((e.ctrlKey || e.metaKey) && e.key === 's') {
+        e.preventDefault();
+        if (!isRendering && librariesReady) {
+          renderTSX();
+        }
+        return;
+      }
+      
+      if (e.key === 'Escape' && showFindDialog) {
+        setShowFindDialog(false);
+        setFindTerm('');
+        return;
+      }
+    };
+    
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [showFindDialog, renderMode, activeEditorTab, combinedCode, code, isRendering, librariesReady]);
+
+  // CR-EW-02: Code Formatting
+  const formatCode = async () => {
+    const currentCode = renderMode === 'combined' ? combinedCode[activeEditorTab as keyof CombinedCode] : code;
+    
+    if (!prettierReady || !window.prettier) {
+      // Load Prettier from CDN
+      return new Promise<void>((resolve) => {
+        if (window.prettier) {
+          setPrettierReady(true);
+          resolve();
+          return;
+        }
+        
+        const script = document.createElement('script');
+        script.src = 'https://cdn.jsdelivr.net/npm/prettier@3.0.0/standalone.js';
+        script.onload = () => {
+          const parserScript = document.createElement('script');
+          parserScript.src = 'https://cdn.jsdelivr.net/npm/prettier@3.0.0/parser-babel.js';
+          parserScript.onload = () => {
+            const htmlScript = document.createElement('script');
+            htmlScript.src = 'https://cdn.jsdelivr.net/npm/prettier@3.0.0/parser-html.js';
+            htmlScript.onload = () => {
+              const cssScript = document.createElement('script');
+              cssScript.src = 'https://cdn.jsdelivr.net/npm/prettier@3.0.0/parser-postcss.js';
+              cssScript.onload = () => {
+                setPrettierReady(true);
+                formatCode();
+                resolve();
+              };
+              document.head.appendChild(cssScript);
+            };
+            document.head.appendChild(htmlScript);
+          };
+          document.head.appendChild(parserScript);
+        };
+        document.head.appendChild(script);
+      });
+    }
+    
+    try {
+      let formatted = currentCode;
+      if (window.prettier) {
+        const parser = activeEditorTab === 'tsx' ? 'babel' : activeEditorTab === 'html' ? 'html' : activeEditorTab === 'css' ? 'css' : 'babel';
+        formatted = window.prettier.format(currentCode, {
+          parser,
+          plugins: window.prettierPlugins ? Object.values(window.prettierPlugins) : [],
+          semi: true,
+          singleQuote: true,
+          tabWidth: 2,
+        });
+      }
+      
+      if (renderMode === 'combined') {
+        updateCombinedCode(activeEditorTab as keyof CombinedCode, formatted);
+      } else {
+        setCode(formatted);
+      }
+      addLog('success', 'Code formatted successfully');
+    } catch (err) {
+      addLog('error', `Formatting failed: ${err instanceof Error ? err.message : String(err)}`);
+    }
+  };
+
+  // CR-EW-04: Export Options
+  const exportHTML = () => {
+    if (!htmlContent && !renderedComponent) {
+      addLog('error', 'Nothing to export. Please render first.');
+      return;
+    }
+    
+    let html = '';
+    if (htmlContent) {
+      html = htmlContent;
+    } else if (renderedComponent) {
+      // Create a simple HTML wrapper
+      html = `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Exported Component</title>
+  <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+  <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.5/babel.min.js"></script>
+</head>
+<body>
+  <div id="root"></div>
+  <script type="text/babel">
+    ${renderMode === 'combined' ? combinedCode.tsx : code}
+  </script>
+</body>
+</html>`;
+    }
+    
+    const blob = new Blob([html], { type: 'text/html' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'exported-component.html';
+    a.click();
+    URL.revokeObjectURL(url);
+    addLog('success', 'HTML exported successfully');
+  };
+
+  const exportCode = () => {
+    const currentCode = renderMode === 'combined' ? combinedCode[activeEditorTab as keyof CombinedCode] : code;
+    const extension = activeEditorTab === 'tsx' ? 'tsx' : activeEditorTab === 'html' ? 'html' : activeEditorTab === 'css' ? 'css' : 'js';
+    const blob = new Blob([currentCode], { type: 'text/plain' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `code.${extension}`;
+    a.click();
+    URL.revokeObjectURL(url);
+    addLog('success', `Code exported as ${extension} file`);
+  };
+
+  const shareViaURL = () => {
+    const currentCode = renderMode === 'combined' ? JSON.stringify(combinedCode) : code;
+    const encoded = encodeURIComponent(currentCode);
+    const url = `${window.location.origin}${window.location.pathname}?code=${encoded}&mode=${renderMode}`;
+    navigator.clipboard.writeText(url);
+    addLog('success', 'Shareable URL copied to clipboard');
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  };
+
+  // CR-EW-05: Code Snippets
+  useEffect(() => {
+    const saved = localStorage.getItem('code-renderer-snippets');
+    if (saved) {
+      try {
+        const parsed = JSON.parse(saved);
+        // Validate and filter snippets
+        const validSnippets: Record<string, { name: string; code: string; mode: 'tsx' | 'html' | 'combined' }> = {};
+        Object.entries(parsed).forEach(([key, value]: [string, any]) => {
+          if (value && typeof value === 'object' && 'name' in value && 'code' in value && 'mode' in value) {
+            if (value.mode === 'tsx' || value.mode === 'html' || value.mode === 'combined') {
+              validSnippets[key] = {
+                name: String(value.name),
+                code: String(value.code),
+                mode: value.mode,
+              };
+            }
+          }
+        });
+        setSnippets(validSnippets);
+      } catch (e) {
+        console.error('Failed to load snippets:', e);
+      }
+    }
+  }, []);
+
+  const saveSnippet = () => {
+    const name = prompt('Enter snippet name:');
+    if (!name) return;
+    
+    const currentCode = renderMode === 'combined' ? JSON.stringify(combinedCode) : code;
+    const snippetMode: 'tsx' | 'html' | 'combined' = renderMode === 'combined' ? 'combined' : renderMode;
+    const newSnippets = {
+      ...snippets,
+    } as Record<string, { name: string; code: string; mode: 'tsx' | 'html' | 'combined' }>;
+    newSnippets[Date.now().toString()] = {
+      name,
+      code: currentCode,
+      mode: snippetMode,
+    };
+    setSnippets(newSnippets);
+    localStorage.setItem('code-renderer-snippets', JSON.stringify(newSnippets));
+    addLog('success', `Snippet "${name}" saved`);
+  };
+
+  const loadSnippet = (snippetId: string) => {
+    const snippet = snippets[snippetId];
+    if (!snippet) return;
+    
+    if (snippet.mode === 'combined') {
+      try {
+        const parsed = JSON.parse(snippet.code);
+        setCombinedCode(parsed);
+        setRenderMode('combined');
+      } catch {
+        addLog('error', 'Failed to load snippet');
+      }
+    } else {
+      setCode(snippet.code);
+      setRenderMode(snippet.mode);
+    }
+    setShowSnippetsMenu(false);
+    addLog('success', `Snippet "${snippet.name}" loaded`);
+  };
+
+  const deleteSnippet = (snippetId: string) => {
+    const newSnippets = { ...snippets };
+    delete newSnippets[snippetId];
+    setSnippets(newSnippets);
+    localStorage.setItem('code-renderer-snippets', JSON.stringify(newSnippets));
+    addLog('success', 'Snippet deleted');
+  };
+
+  // Load code from URL on mount
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const codeParam = params.get('code');
+    const modeParam = params.get('mode') as 'tsx' | 'html' | 'combined' | null;
+    if (codeParam) {
+      try {
+        const decoded = decodeURIComponent(codeParam);
+        if (modeParam === 'combined') {
+          const parsed = JSON.parse(decoded);
+          setCombinedCode(parsed);
+          setRenderMode('combined');
+        } else {
+          setCode(decoded);
+          setRenderMode(modeParam || 'tsx');
+        }
+      } catch (e) {
+        console.error('Failed to load code from URL:', e);
+      }
+    }
+  }, []);
+
+  // Close dropdowns when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      const target = e.target as HTMLElement;
+      if (!target.closest('.group') && !target.closest('[data-snippets-menu]')) {
+        setShowSnippetsMenu(false);
+      }
+    };
+    if (showSnippetsMenu) {
+      document.addEventListener('mousedown', handleClickOutside);
+      return () => document.removeEventListener('mousedown', handleClickOutside);
+    }
+  }, [showSnippetsMenu]);
 
   const handleClearRender = () => {
     // Remove any injected CSS from Combined mode
@@ -387,7 +737,8 @@ window.customAlert = function() {
   };
 
   const copyCode = async () => {
-    await navigator.clipboard.writeText(code);
+    const currentCode = renderMode === 'combined' ? combinedCode[activeEditorTab as keyof CombinedCode] : code;
+    await navigator.clipboard.writeText(currentCode);
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
   };
@@ -610,8 +961,9 @@ window.customAlert = function() {
       <div className="flex-1 flex overflow-hidden">
         {!isFullscreen && (
           <div className="w-1/2 flex flex-col border-r bg-card">
-            <div className="flex items-center justify-between px-4 py-3 border-b bg-muted/50 min-h-[60px]">
-              <div className="flex gap-2">
+            <div className="flex items-center justify-between px-4 py-3 border-b bg-muted/50 min-h-[60px] flex-wrap gap-2">
+              <div className="flex gap-2 flex-wrap">
+                {/* Import */}
                 <Button variant="outline" size="sm" asChild>
                   <label className="cursor-pointer">
                     <input type="file" accept=".tsx,.ts,.jsx,.js,.txt,.html,.css" onChange={handleFileImport} className="hidden" />
@@ -619,20 +971,8 @@ window.customAlert = function() {
                     Import
                   </label>
                 </Button>
-                <Button variant="outline" size="sm" onClick={copyCode}>
-                  {copied ? <Check className="w-4 h-4 mr-2" /> : <Copy className="w-4 h-4 mr-2" />}
-                  {copied ? 'Copied!' : 'Copy'}
-                </Button>
-                <Button 
-                  size="sm" 
-                  onClick={renderTSX} 
-                  disabled={isRendering || (!librariesReady && (renderMode === 'tsx' || renderMode === 'combined'))} 
-                  className="relative"
-                >
-                  <Play className={`w-4 h-4 mr-2 transition-transform ${isRendering ? 'animate-spin' : ''}`} />
-                  {(renderMode === 'tsx' || renderMode === 'combined') && !librariesReady ? 'Loading...' : isRendering ? 'Rendering...' : 'Render'}
-                  {isRendering && <span className="absolute inset-0 bg-white/20 animate-pulse rounded" />}
-                </Button>
+                
+                {/* Clear */}
                 <Button 
                   variant="outline" 
                   size="sm" 
@@ -642,6 +982,150 @@ window.customAlert = function() {
                   <RotateCcw className="w-4 h-4 mr-2" />
                   Clear
                 </Button>
+                
+                {/* Format */}
+                <Button variant="outline" size="sm" onClick={formatCode} title="Format code">
+                  <Type className="w-4 h-4 mr-2" />
+                  Format
+                </Button>
+                
+                {/* Export Options */}
+                <div className="relative group">
+                  <Button variant="outline" size="sm">
+                    <Download className="w-4 h-4 mr-2" />
+                    Export
+                  </Button>
+                  <div className="absolute top-full left-0 mt-1 bg-card border rounded-md shadow-lg opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all z-50 min-w-[160px]">
+                    <button
+                      onClick={exportHTML}
+                      className="w-full text-left px-3 py-2 text-sm hover:bg-muted flex items-center gap-2"
+                    >
+                      <FileText className="w-4 h-4" />
+                      Export HTML
+                    </button>
+                    <button
+                      onClick={exportCode}
+                      className="w-full text-left px-3 py-2 text-sm hover:bg-muted flex items-center gap-2"
+                    >
+                      <Code className="w-4 h-4" />
+                      Export Code
+                    </button>
+                    <button
+                      onClick={shareViaURL}
+                      className="w-full text-left px-3 py-2 text-sm hover:bg-muted flex items-center gap-2"
+                    >
+                      <Share2 className="w-4 h-4" />
+                      Share URL
+                    </button>
+                  </div>
+                </div>
+                
+                {/* Code Snippets */}
+                <div className="relative group" data-snippets-menu>
+                  <Button variant="outline" size="sm" onClick={() => setShowSnippetsMenu(!showSnippetsMenu)}>
+                    <Save className="w-4 h-4 mr-2" />
+                    Snippets
+                  </Button>
+                  {showSnippetsMenu && (
+                    <div className="absolute top-full left-0 mt-1 bg-card border rounded-md shadow-lg z-50 min-w-[200px] max-h-[300px] overflow-y-auto" data-snippets-menu>
+                      <div className="px-3 py-2 border-b flex items-center justify-between">
+                        <span className="text-sm font-semibold">Snippets</span>
+                        <button
+                          onClick={saveSnippet}
+                          className="text-xs text-accent hover:underline"
+                        >
+                          + Save Current
+                        </button>
+                      </div>
+                      {Object.keys(snippets).length === 0 ? (
+                        <div className="px-3 py-4 text-sm text-muted-foreground text-center">
+                          No snippets saved
+                        </div>
+                      ) : (
+                        Object.entries(snippets).map(([id, snippet]) => (
+                          <div key={id} className="px-3 py-2 hover:bg-muted flex items-center justify-between group/item">
+                            <button
+                              onClick={() => loadSnippet(id)}
+                              className="flex-1 text-left text-sm"
+                            >
+                              {snippet.name}
+                            </button>
+                            <button
+                              onClick={() => deleteSnippet(id)}
+                              className="opacity-0 group-hover/item:opacity-100 text-destructive hover:text-destructive/80"
+                            >
+                              <X className="w-4 h-4" />
+                            </button>
+                          </div>
+                        ))
+                      )}
+                    </div>
+                  )}
+                </div>
+                
+                {/* Render - moved to end */}
+                <Button 
+                  size="sm" 
+                  onClick={renderTSX} 
+                  disabled={isRendering || (!librariesReady && (renderMode === 'tsx' || renderMode === 'combined'))} 
+                  className="relative"
+                  title="Ctrl+S / Cmd+S"
+                >
+                  <Play className={`w-4 h-4 mr-2 transition-transform ${isRendering ? 'animate-spin' : ''}`} />
+                  {(renderMode === 'tsx' || renderMode === 'combined') && !librariesReady ? 'Loading...' : isRendering ? 'Rendering...' : 'Render'}
+                  {isRendering && <span className="absolute inset-0 bg-white/20 animate-pulse rounded" />}
+                </Button>
+                
+                {/* Settings - Editor Enhancements */}
+                <div className="relative group">
+                  <Button variant="outline" size="sm">
+                    <Settings className="w-4 h-4 mr-2" />
+                    Settings
+                  </Button>
+                  <div className="absolute top-full left-0 mt-1 bg-card border rounded-md shadow-lg opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all z-50 min-w-[200px]">
+                    <button
+                      onClick={() => setShowLineNumbers(!showLineNumbers)}
+                      className={`w-full text-left px-3 py-2 text-sm hover:bg-muted flex items-center gap-2 ${showLineNumbers ? 'bg-accent/10' : ''}`}
+                    >
+                      <FileText className="w-4 h-4" />
+                      Line Numbers {showLineNumbers ? '✓' : ''}
+                    </button>
+                    <button
+                      onClick={() => setWordWrap(!wordWrap)}
+                      className={`w-full text-left px-3 py-2 text-sm hover:bg-muted flex items-center gap-2 ${wordWrap ? 'bg-accent/10' : ''}`}
+                    >
+                      <WrapText className="w-4 h-4" />
+                      Word Wrap {wordWrap ? '✓' : ''}
+                    </button>
+                    <div className="px-3 py-2 text-sm border-t border-border">
+                      <div className="text-xs text-muted-foreground mb-1">Font Size</div>
+                      <div className="flex items-center gap-2">
+                        <button
+                          onClick={() => setFontSize(Math.max(10, fontSize - 2))}
+                          className="p-1 hover:bg-muted rounded"
+                          title="Decrease font size"
+                        >
+                          <ZoomOut className="w-4 h-4" />
+                        </button>
+                        <span className="text-xs text-muted-foreground min-w-[40px] text-center">{fontSize}px</span>
+                        <button
+                          onClick={() => setFontSize(Math.min(24, fontSize + 2))}
+                          className="p-1 hover:bg-muted rounded"
+                          title="Increase font size"
+                        >
+                          <ZoomIn className="w-4 h-4" />
+                        </button>
+                      </div>
+                    </div>
+                    <button
+                      onClick={() => setShowFindDialog(true)}
+                      className="w-full text-left px-3 py-2 text-sm hover:bg-muted flex items-center gap-2 border-t border-border"
+                    >
+                      <Search className="w-4 h-4" />
+                      Find (Ctrl+F)
+                    </button>
+                  </div>
+                </div>
               </div>
               {renderMode === 'combined' && (
                 <div className="flex gap-1 border-l pl-4 ml-4">
@@ -662,13 +1146,78 @@ window.customAlert = function() {
               )}
             </div>
             
-            <textarea
-              value={renderMode === 'combined' ? combinedCode[activeEditorTab as keyof CombinedCode] : code}
-              onChange={(e) => renderMode === 'combined' ? updateCombinedCode(activeEditorTab as keyof CombinedCode, e.target.value) : setCode(e.target.value)}
-              className="flex-1 p-4 font-mono text-sm resize-none focus:outline-none bg-background text-foreground border-0"
-              placeholder={renderMode === 'combined' ? `Paste your ${activeEditorTab.toUpperCase()} code here...` : "Paste your code here..."}
-              spellCheck={false}
-            />
+            {/* CR-EW-03: Line Numbers & CR-EW-06: Editor Enhancements */}
+            <div className="flex-1 flex overflow-hidden relative">
+              {showLineNumbers && (
+                <div 
+                  className="bg-muted/30 text-muted-foreground text-xs font-mono py-4 px-2 select-none border-r"
+                  style={{ fontSize: `${fontSize}px`, lineHeight: `${fontSize * 1.5}px` }}
+                >
+                  {(() => {
+                    const currentCode = renderMode === 'combined' ? combinedCode[activeEditorTab as keyof CombinedCode] : code;
+                    const lines = currentCode.split('\n');
+                    return lines.map((_, i) => (
+                      <div key={i} style={{ height: `${fontSize * 1.5}px` }} className="text-right pr-2">
+                        {i + 1}
+                      </div>
+                    ));
+                  })()}
+                </div>
+              )}
+              <textarea
+                ref={textareaRef}
+                value={renderMode === 'combined' ? combinedCode[activeEditorTab as keyof CombinedCode] : code}
+                onChange={(e) => renderMode === 'combined' ? updateCombinedCode(activeEditorTab as keyof CombinedCode, e.target.value) : setCode(e.target.value)}
+                className="flex-1 p-4 font-mono resize-none focus:outline-none bg-background text-foreground border-0"
+                style={{ 
+                  fontSize: `${fontSize}px`,
+                  lineHeight: `${fontSize * 1.5}px`,
+                  whiteSpace: wordWrap ? 'pre-wrap' : 'pre',
+                  overflowWrap: wordWrap ? 'break-word' : 'normal'
+                }}
+                placeholder={renderMode === 'combined' ? `Paste your ${activeEditorTab.toUpperCase()} code here...` : "Paste your code here..."}
+                spellCheck={false}
+              />
+            </div>
+            
+            {/* CR-EW-01: Find Dialog */}
+            {showFindDialog && (
+              <div className="absolute top-16 left-4 right-4 bg-card border rounded-md shadow-lg p-3 z-50 flex items-center gap-2">
+                <Search className="w-4 h-4 text-muted-foreground" />
+                <Input
+                  value={findTerm}
+                  onChange={(e) => setFindTerm(e.target.value)}
+                  placeholder="Find in code..."
+                  className="flex-1"
+                  autoFocus
+                  onKeyDown={(e) => {
+                    if (e.key === 'Escape') {
+                      setShowFindDialog(false);
+                      setFindTerm('');
+                    }
+                  }}
+                />
+                <Button variant="outline" size="sm" onClick={() => {
+                  if (findTerm && textareaRef.current) {
+                    const currentCode = renderMode === 'combined' ? combinedCode[activeEditorTab as keyof CombinedCode] : code;
+                    const index = currentCode.indexOf(findTerm);
+                    if (index !== -1) {
+                      textareaRef.current.setSelectionRange(index, index + findTerm.length);
+                      textareaRef.current.focus();
+                      textareaRef.current.scrollIntoView({ block: 'center' });
+                    }
+                  }
+                }}>
+                  Find
+                </Button>
+                <Button variant="outline" size="sm" onClick={() => {
+                  setShowFindDialog(false);
+                  setFindTerm('');
+                }}>
+                  <X className="w-4 h-4" />
+                </Button>
+              </div>
+            )}
           </div>
         )}
 

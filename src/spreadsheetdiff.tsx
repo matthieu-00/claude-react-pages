@@ -1,5 +1,5 @@
 import { useState, useMemo } from 'react';
-import { Download, AlertCircle, X, FileSpreadsheet } from 'lucide-react';
+import { Download, AlertCircle, X, FileSpreadsheet, BarChart3, Filter } from 'lucide-react';
 import Papa from 'papaparse';
 import * as XLSX from 'xlsx';
 import { PageContainer } from '@/components/ui/page-container';
@@ -7,6 +7,7 @@ import { PageHeader } from '@/components/ui/page-header';
 import { Card } from '@/components/ui/card';
 import { Input, Textarea } from '@/components/ui/input';
 import { HelpTooltip } from '@/components/ui/help-tooltip';
+import { Button } from '@/components/ui/button';
 
 type SpreadsheetRow = Record<string, string | number | null | undefined>;
 
@@ -21,6 +22,14 @@ export default function SpreadsheetComparator() {
   const [colLetters2, setColLetters2] = useState<string[]>([]);
   const [showExportModal, setShowExportModal] = useState(false);
   const [selectedExportColumns, setSelectedExportColumns] = useState<string[]>([]);
+  
+  // SD-EW-01, SD-EW-02, SD-EW-03, SD-EW-05: New state for easy wins
+  const [viewMode, setViewMode] = useState<'column' | 'sidebyside'>('column');
+  const [filterType, setFilterType] = useState<'all' | 'added' | 'removed' | 'changed'>('all');
+  const [diffThreshold, setDiffThreshold] = useState<number>(0);
+  const [showOnlyDiffs, setShowOnlyDiffs] = useState(false);
+  const [ignoredColumns, setIgnoredColumns] = useState<Set<string>>(new Set());
+  const [showStats, setShowStats] = useState(true);
 
   const getExcelColumnLetter = (index: number): string => {
     let letter = '';
@@ -200,12 +209,36 @@ export default function SpreadsheetComparator() {
     return [...columnComparisons].sort((a, b) => b.diffCount - a.diffCount);
   }, [columnComparisons]);
 
-  const displayedColumns = useMemo(() => {
-    if (hideIdentical) {
-      return sortedColumns.filter(col => col.diffCount > 0);
+  // SD-EW-02: Filter Differences (must be before displayedColumns)
+  const filteredColumnComparisons = useMemo(() => {
+    let filtered = columnComparisons.filter(col => !ignoredColumns.has(col.column));
+    
+    if (filterType !== 'all') {
+      filtered = filtered.map(col => ({
+        ...col,
+        differences: col.differences.filter(diff => diff.status === filterType),
+        diffCount: col.differences.filter(diff => diff.status === filterType).length,
+      })).filter(col => col.diffCount > 0);
     }
-    return sortedColumns;
-  }, [sortedColumns, hideIdentical]);
+    
+    if (diffThreshold > 0) {
+      const maxRows = Math.max(data1?.length || 0, data2?.length || 0);
+      filtered = filtered.filter(col => {
+        const percentage = (col.diffCount / maxRows) * 100;
+        return percentage >= diffThreshold;
+      });
+    }
+    
+    return filtered;
+  }, [columnComparisons, filterType, diffThreshold, ignoredColumns, data1, data2]);
+
+  const displayedColumns = useMemo(() => {
+    let cols = filteredColumnComparisons;
+    if (hideIdentical) {
+      cols = cols.filter(col => col.diffCount > 0);
+    }
+    return cols;
+  }, [filteredColumnComparisons, hideIdentical]);
 
   const getBarColor = (diffCount: number, totalRows: number): string => {
     if (diffCount === 0) return 'bg-accent';
@@ -267,6 +300,91 @@ export default function SpreadsheetComparator() {
   };
 
   const totalDiffs = columnComparisons.reduce((sum, col) => sum + col.diffCount, 0);
+
+  // SD-EW-03: Statistics Dashboard
+  const statistics = useMemo(() => {
+    const columnsAffected = columnComparisons.filter(c => c.diffCount > 0).length;
+    const rowsAffected = new Set<number>();
+    columnComparisons.forEach(col => {
+      col.differences.forEach(diff => {
+        if (diff.status !== 'same') {
+          rowsAffected.add(diff.rowIndex);
+        }
+      });
+    });
+    
+    const changeDistribution = {
+      added: columnComparisons.reduce((sum, col) => sum + col.differences.filter(d => d.status === 'added').length, 0),
+      removed: columnComparisons.reduce((sum, col) => sum + col.differences.filter(d => d.status === 'removed').length, 0),
+      changed: columnComparisons.reduce((sum, col) => sum + col.differences.filter(d => d.status === 'changed').length, 0),
+    };
+    
+    const mostChangedColumns = [...columnComparisons]
+      .sort((a, b) => b.diffCount - a.diffCount)
+      .slice(0, 5)
+      .map(col => ({ name: col.column, count: col.diffCount }));
+    
+    return {
+      totalChanges: totalDiffs,
+      columnsAffected,
+      rowsAffected: rowsAffected.size,
+      changeDistribution,
+      mostChangedColumns,
+    };
+  }, [columnComparisons, totalDiffs]);
+
+  // SD-EW-04: Export Enhancements
+  const exportToExcel = () => {
+    if (!data1 || !data2) return;
+    
+    const wb = XLSX.utils.book_new();
+    const differences: Array<Record<string, any>> = [];
+    
+    filteredColumnComparisons.forEach(col => {
+      col.differences.forEach(diff => {
+        if (diff.status !== 'same' || !showOnlyDiffs) {
+          differences.push({
+            Column: col.column,
+            Row: diff.rowIndex + 1,
+            'Spreadsheet 1': diff.value1,
+            'Spreadsheet 2': diff.value2,
+            Status: diff.status,
+          });
+        }
+      });
+    });
+    
+    const ws = XLSX.utils.json_to_sheet(differences);
+    XLSX.utils.book_append_sheet(wb, ws, 'Differences');
+    XLSX.writeFile(wb, 'spreadsheet_diff.xlsx');
+  };
+
+  const exportSummaryReport = () => {
+    const report = `Spreadsheet Comparison Report
+Generated: ${new Date().toLocaleString()}
+
+Summary:
+- Total Changes: ${statistics.totalChanges}
+- Columns Affected: ${statistics.columnsAffected}
+- Rows Affected: ${statistics.rowsAffected}
+
+Change Distribution:
+- Added: ${statistics.changeDistribution.added}
+- Removed: ${statistics.changeDistribution.removed}
+- Changed: ${statistics.changeDistribution.changed}
+
+Most Changed Columns:
+${statistics.mostChangedColumns.map((col, i) => `${i + 1}. ${col.name}: ${col.count} differences`).join('\n')}
+`;
+    
+    const blob = new Blob([report], { type: 'text/plain' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'comparison_summary.txt';
+    a.click();
+    URL.revokeObjectURL(url);
+  };
 
   const helpContent = (
     <div className="space-y-6 text-sm">
@@ -401,35 +519,129 @@ export default function SpreadsheetComparator() {
           </div>
 
           {data1 && data2 && (
-            <div className="p-4 bg-muted border-b flex items-center justify-between flex-wrap gap-3">
-              <div className="flex gap-4 text-sm">
-                <span className="font-semibold">Total Differences: {totalDiffs}</span>
-                <span className="text-muted-foreground">Across {columnComparisons.filter(c => c.diffCount > 0).length} columns</span>
-              </div>
-              <div className="flex items-center gap-3">
-                <label className="flex items-center gap-2 text-sm cursor-pointer select-none">
-                  <span className="text-gray-700">Hide identical columns</span>
-                  <div 
-                    className={`relative w-11 h-6 rounded-full transition-colors ${
-                      hideIdentical ? 'bg-accent' : 'bg-muted'
-                    }`}
-                    onClick={() => setHideIdentical(!hideIdentical)}
-                  >
-                    <div 
-                      className={`absolute top-0.5 left-0.5 w-5 h-5 bg-card rounded-full transition-transform ${
-                        hideIdentical ? 'translate-x-5' : 'translate-x-0'
-                      }`}
+            <>
+              {/* SD-EW-03: Statistics Dashboard */}
+              {showStats && (
+                <div className="p-4 bg-card border-b">
+                  <div className="flex items-center justify-between mb-3">
+                    <h3 className="font-semibold text-sm flex items-center gap-2">
+                      <BarChart3 className="w-4 h-4" />
+                      Statistics Dashboard
+                    </h3>
+                    <Button variant="outline" size="sm" onClick={() => setShowStats(false)}>
+                      <X className="w-4 h-4" />
+                    </Button>
+                  </div>
+                  <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-3">
+                    <div className="p-3 bg-muted rounded">
+                      <div className="text-xs text-muted-foreground">Total Changes</div>
+                      <div className="text-lg font-bold">{statistics.totalChanges}</div>
+                    </div>
+                    <div className="p-3 bg-muted rounded">
+                      <div className="text-xs text-muted-foreground">Columns Affected</div>
+                      <div className="text-lg font-bold">{statistics.columnsAffected}</div>
+                    </div>
+                    <div className="p-3 bg-muted rounded">
+                      <div className="text-xs text-muted-foreground">Rows Affected</div>
+                      <div className="text-lg font-bold">{statistics.rowsAffected}</div>
+                    </div>
+                    <div className="p-3 bg-muted rounded">
+                      <div className="text-xs text-muted-foreground">Most Changed</div>
+                      <div className="text-sm font-semibold truncate" title={statistics.mostChangedColumns[0]?.name}>
+                        {statistics.mostChangedColumns[0]?.name || 'N/A'}
+                      </div>
+                    </div>
+                  </div>
+                  {statistics.mostChangedColumns.length > 0 && (
+                    <div className="text-xs text-muted-foreground">
+                      Top changed: {statistics.mostChangedColumns.slice(0, 3).map(c => `${c.name} (${c.count})`).join(', ')}
+                    </div>
+                  )}
+                </div>
+              )}
+              
+              {!showStats && (
+                <div className="p-2 border-b">
+                  <Button variant="outline" size="sm" onClick={() => setShowStats(true)}>
+                    <BarChart3 className="w-4 h-4 mr-2" />
+                    Show Statistics
+                  </Button>
+                </div>
+              )}
+
+              {/* SD-EW-02: Filter Differences */}
+              <div className="p-4 bg-muted border-b flex items-center justify-between flex-wrap gap-3">
+                <div className="flex gap-4 text-sm flex-wrap">
+                  <span className="font-semibold">Total Differences: {totalDiffs}</span>
+                  <span className="text-muted-foreground">Across {columnComparisons.filter(c => c.diffCount > 0).length} columns</span>
+                </div>
+                <div className="flex items-center gap-3 flex-wrap">
+                  <div className="flex items-center gap-2">
+                    <Filter className="w-4 h-4" />
+                    <select
+                      value={filterType}
+                      onChange={(e) => setFilterType(e.target.value as typeof filterType)}
+                      className="text-xs px-2 py-1 rounded bg-background border"
+                    >
+                      <option value="all">All Changes</option>
+                      <option value="added">Added Only</option>
+                      <option value="removed">Removed Only</option>
+                      <option value="changed">Changed Only</option>
+                    </select>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs">Min %:</span>
+                    <input
+                      type="number"
+                      min="0"
+                      max="100"
+                      value={diffThreshold}
+                      onChange={(e) => setDiffThreshold(Number(e.target.value))}
+                      className="w-16 text-xs px-2 py-1 rounded bg-background border"
+                      placeholder="0"
                     />
                   </div>
-                </label>
-                <button 
-                  onClick={() => setShowExportModal(true)}
-                  className="flex items-center gap-1 bg-blue-600 text-foreground px-3 py-1 rounded hover:bg-blue-700 text-xs"
-                >
-                  <Download className="w-3 h-3" /> Export Differences
-                </button>
+                  <label className="flex items-center gap-2 text-sm cursor-pointer select-none">
+                    <span className="text-gray-700">Hide identical</span>
+                    <div 
+                      className={`relative w-11 h-6 rounded-full transition-colors ${
+                        hideIdentical ? 'bg-accent' : 'bg-muted'
+                      }`}
+                      onClick={() => setHideIdentical(!hideIdentical)}
+                    >
+                      <div 
+                        className={`absolute top-0.5 left-0.5 w-5 h-5 bg-card rounded-full transition-transform ${
+                          hideIdentical ? 'translate-x-5' : 'translate-x-0'
+                        }`}
+                      />
+                    </div>
+                  </label>
+                  <div className="flex gap-2">
+                    <Button 
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setShowExportModal(true)}
+                    >
+                      <Download className="w-3 h-3 mr-1" /> CSV
+                    </Button>
+                    <Button 
+                      variant="outline"
+                      size="sm"
+                      onClick={exportToExcel}
+                    >
+                      <FileSpreadsheet className="w-3 h-3 mr-1" /> Excel
+                    </Button>
+                    <Button 
+                      variant="outline"
+                      size="sm"
+                      onClick={exportSummaryReport}
+                    >
+                      <FileSpreadsheet className="w-3 h-3 mr-1" /> Summary
+                    </Button>
+                  </div>
+                </div>
               </div>
-            </div>
+            </>
           )}
 
           {data1 && data2 && (
