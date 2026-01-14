@@ -9,14 +9,39 @@ function RedirectHandler() {
   const navigate = useNavigate()
   
   React.useEffect(() => {
-    const urlParams = new URLSearchParams(window.location.search)
-    const redirectPath = urlParams.get('/')
+    const search = window.location.search
     
-    if (redirectPath) {
-      // Decode the path (replace ~and~ with &)
-      const decodedPath = redirectPath.replace(/~and~/g, '&')
-      // Navigate to the decoded path
-      navigate(decodedPath, { replace: true })
+    // Check if this is a redirect from 404.html (format: ?/path)
+    if (search.startsWith('?/')) {
+      // Extract the path after ?/
+      let redirectPath = search.slice(2) // Remove '?/'
+      
+      // Ensure path starts with / for React Router
+      if (!redirectPath.startsWith('/')) {
+        redirectPath = '/' + redirectPath
+      }
+      
+      // Handle query parameters that might be in the path (format: path&key=value)
+      const ampersandIndex = redirectPath.indexOf('&')
+      if (ampersandIndex !== -1) {
+        // Split path and query params
+        const pathPart = redirectPath.slice(0, ampersandIndex)
+        const queryPart = redirectPath.slice(ampersandIndex + 1)
+        
+        // Decode the path (replace ~and~ with &)
+        const decodedPath = pathPart.replace(/~and~/g, '&')
+        
+        // Parse and add query parameters back
+        const queryParams = new URLSearchParams(queryPart.replace(/~and~/g, '&'))
+        const queryString = queryParams.toString()
+        
+        // Navigate with path and query string
+        navigate(decodedPath + (queryString ? '?' + queryString : ''), { replace: true })
+      } else {
+        // No query params, just decode the path
+        redirectPath = redirectPath.replace(/~and~/g, '&')
+        navigate(redirectPath, { replace: true })
+      }
     }
   }, [navigate])
   
