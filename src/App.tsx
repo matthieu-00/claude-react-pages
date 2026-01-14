@@ -3,13 +3,18 @@ import LiveCodeRenderer from './coderenderer'
 import SpreadsheetComparator from './spreadsheetdiff'
 import PRDeploymentTracker from './deploymenttrracker'
 import JsonExtractor from './jsonextractor'
-import { Code, FileSpreadsheet, GitBranch, Database } from 'lucide-react'
+import { Code, FileSpreadsheet, GitBranch, Database, Menu, X } from 'lucide-react'
 import { ThemeProvider } from './contexts/ThemeContext'
 import { ThemeToggle } from './components/ThemeToggle'
+import { useEffect, useId, useRef, useState } from 'react'
 import './App.css'
 
 function Navigation() {
   const location = useLocation()
+  const [isMobileNavOpen, setIsMobileNavOpen] = useState(false)
+  const drawerId = useId()
+  const menuButtonRef = useRef<HTMLButtonElement | null>(null)
+  const firstLinkRef = useRef<HTMLAnchorElement | null>(null)
   
   const navItems = [
     { path: '/', label: 'Home', icon: null },
@@ -19,31 +24,138 @@ function Navigation() {
     { path: '/json-extractor', label: 'JSON Extractor', icon: Database },
   ]
 
+  useEffect(() => {
+    if (!isMobileNavOpen) return
+
+    const previousOverflow = document.body.style.overflow
+    document.body.style.overflow = 'hidden'
+
+    // Focus first interactive element in drawer.
+    queueMicrotask(() => firstLinkRef.current?.focus())
+
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setIsMobileNavOpen(false)
+    }
+    window.addEventListener('keydown', onKeyDown)
+
+    return () => {
+      window.removeEventListener('keydown', onKeyDown)
+      document.body.style.overflow = previousOverflow
+      // Restore focus to the menu button.
+      queueMicrotask(() => menuButtonRef.current?.focus())
+    }
+  }, [isMobileNavOpen])
+
   return (
     <nav className="border-b bg-card">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex items-center justify-between">
-          <div className="flex space-x-8">
-            {navItems.map((item) => {
+          {/* Left: brand/title */}
+          <div className="flex items-center gap-3">
+            <Link
+              to="/"
+              className="text-sm font-semibold text-foreground hover:text-primary transition-colors whitespace-nowrap"
+              aria-label="PST Toolings home"
+            >
+              PST Toolings
+            </Link>
+
+            {/* Center (desktop only): nav */}
+            <div className="hidden sm:flex space-x-6">
+              {navItems.map((item) => {
+                const Icon = item.icon
+                const isActive = location.pathname === item.path
+                return (
+                  <Link
+                    key={item.path}
+                    to={item.path}
+                    className={`flex items-center gap-2 px-3 py-4 text-sm font-medium border-b-2 transition-all duration-200 hover:scale-[1.02] ${
+                      isActive
+                        ? 'border-primary text-primary'
+                        : 'border-transparent text-muted-foreground hover:text-foreground hover:border-muted-foreground'
+                    }`}
+                  >
+                    {Icon && <Icon className="w-4 h-4 transition-transform duration-200" />}
+                    {item.label}
+                  </Link>
+                )
+              })}
+            </div>
+          </div>
+
+          {/* Right: theme toggle + hamburger (mobile only) */}
+          <div className="flex items-center gap-2">
+            <ThemeToggle />
+            <button
+              ref={menuButtonRef}
+              type="button"
+              className="sm:hidden inline-flex items-center justify-center rounded-md p-2 text-muted-foreground hover:text-foreground hover:bg-accent transition-colors"
+              aria-label={isMobileNavOpen ? 'Close menu' : 'Open menu'}
+              aria-expanded={isMobileNavOpen}
+              aria-controls={drawerId}
+              onClick={() => setIsMobileNavOpen((v) => !v)}
+            >
+              {isMobileNavOpen ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
+            </button>
+          </div>
+        </div>
+      </div>
+
+      {/* Mobile slide-in drawer */}
+      <div
+        id={drawerId}
+        className={`sm:hidden fixed inset-0 z-50 ${isMobileNavOpen ? '' : 'pointer-events-none'}`}
+        role="dialog"
+        aria-modal="true"
+        aria-hidden={!isMobileNavOpen}
+      >
+        <div
+          className={`absolute inset-0 bg-background/80 backdrop-blur-sm transition-opacity duration-200 ${
+            isMobileNavOpen ? 'opacity-100' : 'opacity-0'
+          }`}
+          onClick={() => setIsMobileNavOpen(false)}
+        />
+        <div
+          tabIndex={-1}
+          className={`absolute left-0 top-0 h-full w-80 max-w-[85vw] bg-card border-r shadow-lg transition-transform duration-200 ease-out ${
+            isMobileNavOpen ? 'translate-x-0' : '-translate-x-full'
+          }`}
+        >
+          <div className="p-4 border-b flex items-center justify-between">
+            <span className="text-sm font-semibold text-foreground">Menu</span>
+            <button
+              type="button"
+              className="inline-flex items-center justify-center rounded-md p-2 text-muted-foreground hover:text-foreground hover:bg-accent transition-colors"
+              aria-label="Close menu"
+              onClick={() => setIsMobileNavOpen(false)}
+            >
+              <X className="h-5 w-5" />
+            </button>
+          </div>
+
+          <div className="p-2">
+            {navItems.map((item, idx) => {
               const Icon = item.icon
               const isActive = location.pathname === item.path
               return (
                 <Link
                   key={item.path}
+                  // @ts-expect-error react-router Link forwards to anchor in DOM
+                  ref={idx === 0 ? firstLinkRef : undefined}
                   to={item.path}
-                  className={`flex items-center gap-2 px-3 py-4 text-sm font-medium border-b-2 transition-all duration-200 hover:scale-[1.02] ${
+                  onClick={() => setIsMobileNavOpen(false)}
+                  className={`flex items-center gap-3 rounded-md px-3 py-3 text-sm font-medium transition-colors ${
                     isActive
-                      ? 'border-primary text-primary'
-                      : 'border-transparent text-muted-foreground hover:text-foreground hover:border-muted-foreground'
+                      ? 'bg-accent text-accent-foreground'
+                      : 'text-muted-foreground hover:text-foreground hover:bg-accent'
                   }`}
                 >
-                  {Icon && <Icon className="w-4 h-4 transition-transform duration-200" />}
+                  {Icon && <Icon className="w-4 h-4" />}
                   {item.label}
                 </Link>
               )
             })}
           </div>
-          <ThemeToggle />
         </div>
       </div>
     </nav>
@@ -52,7 +164,7 @@ function Navigation() {
 
 function Home() {
   return (
-    <div className="min-h-screen bg-background p-8">
+    <div className="min-h-screen bg-background p-4 sm:p-8">
       <div className="max-w-4xl mx-auto">
         <div className="text-center mb-12">
           <h1 className="text-4xl font-bold mb-4">PST Toolings</h1>

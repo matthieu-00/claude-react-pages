@@ -949,9 +949,9 @@ window.customAlert = function() {
         </div>
       </div>
 
-      <div className="flex-1 flex overflow-hidden">
+      <div className={`flex-1 flex flex-col ${isFullscreen ? '' : 'lg:flex-row'} overflow-hidden`}>
         {!isFullscreen && (
-          <div className="w-1/2 flex flex-col border-r bg-card">
+          <div className="w-full lg:w-1/2 flex flex-col lg:border-r bg-card">
             <div className="flex items-center justify-between px-4 py-3 border-b bg-muted/50 min-h-[60px] flex-wrap gap-2">
               <div className="flex gap-2 flex-wrap">
                 {/* Import */}
@@ -1212,7 +1212,7 @@ window.customAlert = function() {
           </div>
         )}
 
-        <div className={`${isFullscreen ? 'fixed inset-0 z-50 bg-card' : 'w-1/2'} flex flex-col bg-card`}>
+        <div className={`${isFullscreen ? 'fixed inset-0 z-50 bg-card' : 'w-full lg:w-1/2'} flex flex-col bg-card`}>
           <div className="flex items-center justify-between px-4 py-3 border-b bg-muted/50">
             <div className="flex gap-2">
               <button

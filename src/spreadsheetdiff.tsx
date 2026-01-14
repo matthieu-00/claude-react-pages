@@ -644,7 +644,7 @@ ${statistics.mostChangedColumns.map((col, i) => `${i + 1}. ${col.name}: ${col.co
 
           {data1 && data2 && (
             <div className="grid md:grid-cols-3 gap-4 p-4">
-              <div className="md:col-span-1 border-r pr-4">
+              <div className="md:col-span-1 md:border-r md:pr-4">
                 <h3 className="font-semibold mb-3 text-sm">Columns Ranked by Differences</h3>
                 <div className="space-y-2 overflow-auto" style={{ maxHeight: 'calc(100vh - 400px)' }}>
                   {displayedColumns.map((col, idx) => (

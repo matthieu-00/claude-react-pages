@@ -23,3 +23,19 @@ test('home loads and navigation works', async ({ page }) => {
   await expect(page.getByRole('heading', { name: 'PST Toolings' })).toBeVisible();
 });
 
+test('mobile hamburger menu opens and navigates', async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 }); // iPhone 12-ish
+  await page.goto('./');
+
+  // Desktop links should be hidden at this width; use the hamburger.
+  const openMenu = page.getByRole('button', { name: 'Open menu' });
+  await expect(openMenu).toBeVisible();
+  await openMenu.click();
+
+  const navLink = page.getByRole('link', { name: 'Code Renderer', exact: true });
+  await expect(navLink).toBeVisible();
+  await navLink.click();
+
+  await expect(page.getByText('Live Code Renderer')).toBeVisible();
+});
+
