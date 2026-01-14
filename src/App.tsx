@@ -75,7 +75,7 @@ function Navigation() {
           </div>
 
           {/* Right: theme toggle + hamburger (mobile only) */}
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 ml-auto">
             <ThemeToggle />
             <button
               ref={menuButtonRef}
