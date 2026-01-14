@@ -951,7 +951,7 @@ window.customAlert = function() {
 
       <div className={`flex-1 flex flex-col ${isFullscreen ? '' : 'lg:flex-row'} overflow-hidden`}>
         {!isFullscreen && (
-          <div className="w-full lg:w-1/2 flex flex-col lg:border-r bg-card min-h-0">
+          <div className="w-full lg:w-1/2 flex flex-col lg:border-r bg-card min-h-0 flex-1">
             <div className="flex items-center justify-between px-4 py-3 border-b bg-muted/50 min-h-[60px] flex-wrap gap-2">
               <div className="flex gap-2 flex-wrap">
                 {/* Import */}
@@ -1138,7 +1138,7 @@ window.customAlert = function() {
             </div>
             
             {/* CR-EW-03: Line Numbers & CR-EW-06: Editor Enhancements */}
-            <div className="flex-1 flex overflow-x-auto overflow-y-hidden relative min-w-0">
+            <div className="flex-1 flex overflow-auto relative min-w-0">
               {showLineNumbers && (
                 <div 
                   className="bg-muted/30 text-muted-foreground text-xs font-mono py-4 px-2 select-none border-r flex-shrink-0"
@@ -1213,7 +1213,7 @@ window.customAlert = function() {
           </div>
         )}
 
-        <div className={`${isFullscreen ? 'fixed inset-0 z-50 bg-card' : 'w-full lg:w-1/2'} flex flex-col bg-card min-h-0`}>
+        <div className={`${isFullscreen ? 'fixed inset-0 z-50 bg-card' : 'w-full lg:w-1/2 flex-1'} flex flex-col bg-card min-h-0`}>
           <div className="flex items-center justify-between px-4 py-3 border-b bg-muted/50">
             <div className="flex gap-2">
               <button
