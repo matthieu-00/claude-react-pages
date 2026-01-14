@@ -494,10 +494,6 @@ window.customAlert = function() {
           setRenderedComponent(null as RenderedComponentType);
           addLog('success', 'HTML rendered successfully');
           setIsRendering(false);
-          // Switch to preview panel on mobile after rendering
-          if (window.innerWidth < 1024) {
-            setMobilePanel('preview');
-          }
           return;
         }
 
@@ -635,10 +631,6 @@ window.customAlert = function() {
           
           setHtmlContent(null);
           setIsRendering(false);
-          // Switch to preview panel on mobile after rendering
-          if (window.innerWidth < 1024) {
-            setMobilePanel('preview');
-          }
           return;
         }
 
@@ -732,19 +724,11 @@ window.customAlert = function() {
 
         addLog('success', `Component rendered successfully (${loggedIcons2} icons loaded)`);
         setRenderedComponent(() => Component);
-        // Switch to preview panel on mobile after rendering
-        if (window.innerWidth < 1024) {
-          setMobilePanel('preview');
-        }
       } catch (err) {
         const errorMessage = err instanceof Error ? err.message : String(err);
         setError(errorMessage);
         addLog('error', errorMessage);
         console.error('Render error:', err);
-        // Switch to preview panel on mobile even on error to show error message
-        if (window.innerWidth < 1024) {
-          setMobilePanel('preview');
-        }
       } finally {
         setIsRendering(false);
       }
