@@ -1,11 +1,12 @@
-import { Routes, Route, Link, useLocation } from 'react-router-dom'
+import { Routes, Route, Link, useLocation, useNavigate } from 'react-router-dom'
 import LiveCodeRenderer from './coderenderer'
 import SpreadsheetComparator from './spreadsheetdiff'
 import PRDeploymentTracker from './deploymenttrracker'
 import JsonExtractor from './jsonextractor'
-import { Code, FileSpreadsheet, GitBranch, Database, Menu, X } from 'lucide-react'
+import { Code, FileSpreadsheet, GitBranch, Database, Menu, X, Home as HomeIcon } from 'lucide-react'
 import { ThemeProvider } from './contexts/ThemeContext'
 import { ThemeToggle } from './components/ThemeToggle'
+import { Button } from './components/ui/button'
 import { useEffect, useId, useRef, useState } from 'react'
 import './App.css'
 
@@ -223,6 +224,31 @@ function Home() {
   )
 }
 
+function NotFound() {
+  const navigate = useNavigate()
+  
+  return (
+    <div className="min-h-screen bg-background flex items-center justify-center p-4">
+      <div className="max-w-md w-full text-center">
+        <div className="mb-8">
+          <h1 className="text-9xl font-bold text-muted-foreground mb-4">404</h1>
+          <h2 className="text-3xl font-semibold mb-4">Page Not Found</h2>
+          <p className="text-muted-foreground mb-8">
+            The page you're looking for doesn't exist or has been moved.
+          </p>
+        </div>
+        <Button
+          onClick={() => navigate('/')}
+          size="lg"
+        >
+          <HomeIcon className="w-5 h-5 mr-2" />
+          Return Home
+        </Button>
+      </div>
+    </div>
+  )
+}
+
 function App() {
   const location = useLocation()
   
@@ -236,6 +262,7 @@ function App() {
           <Route path="/spreadsheet-diff" element={<SpreadsheetComparator />} />
           <Route path="/deployment-tracker" element={<PRDeploymentTracker />} />
           <Route path="/json-extractor" element={<JsonExtractor />} />
+          <Route path="*" element={<NotFound />} />
         </Routes>
       </div>
     </ThemeProvider>
