@@ -11,7 +11,12 @@ interface ProtectedRouteProps {
 }
 
 export function ProtectedRoute({ children, path }: ProtectedRouteProps) {
-  const { isAuthenticated, hasPageAccess } = useAuth();
+  const { isAuthenticated, hasPageAccess, isLoading } = useAuth();
+
+  // Wait for auth check to complete before making routing decisions
+  if (isLoading) {
+    return null; // Or a loading spinner if preferred
+  }
 
   // If not authenticated, redirect to home (PIN modal will show)
   if (!isAuthenticated) {

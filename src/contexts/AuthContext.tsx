@@ -4,6 +4,7 @@ import { PIN_CONFIGS, hashPin, type AccessLevel } from '../lib/pinConfig';
 interface AuthContextType {
   isAuthenticated: boolean;
   currentAccessLevel: AccessLevel | null;
+  isLoading: boolean; // Track if we're still checking localStorage
   login: (pin: string) => Promise<boolean>;
   logout: () => void;
   hasPageAccess: (path: string) => boolean;
@@ -41,6 +42,7 @@ function validateAuthToken(token: string): AccessLevel | null {
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [currentAccessLevel, setCurrentAccessLevel] = useState<AccessLevel | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
 
   // Check for existing authentication on mount
   useEffect(() => {
@@ -55,6 +57,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         localStorage.removeItem(AUTH_STORAGE_KEY);
       }
     }
+    // Mark loading as complete after checking localStorage
+    setIsLoading(false);
   }, []);
 
   const login = useCallback(async (pin: string): Promise<boolean> => {
@@ -102,6 +106,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       value={{
         isAuthenticated,
         currentAccessLevel,
+        isLoading,
         login,
         logout,
         hasPageAccess,

@@ -165,7 +165,7 @@ function Navigation() {
 }
 
 function Home() {
-  const { hasPageAccess } = useAuth()
+  const { hasPageAccess, currentAccessLevel, isLoading } = useAuth()
   
   const toolCards = [
     {
@@ -198,8 +198,13 @@ function Home() {
     }
   ]
 
-  // Filter cards based on access level
-  const accessibleCards = toolCards.filter(card => hasPageAccess(card.path))
+  // Filter cards based on access level - only after auth is loaded
+  const accessibleCards = isLoading ? [] : toolCards.filter(card => hasPageAccess(card.path))
+  
+  // For Level 1 and 2, use single column (stacked vertically) to hide missing cards
+  // For Level 3 (full access), use 2-column grid
+  const isLevel1Or2 = currentAccessLevel && (currentAccessLevel.id === 'level1' || currentAccessLevel.id === 'level2')
+  const gridClass = isLevel1Or2 ? 'grid grid-cols-1 max-w-2xl mx-auto gap-6' : 'grid md:grid-cols-2 gap-6'
 
   return (
     <div className="min-h-screen bg-background p-4 sm:p-8">
@@ -211,15 +216,15 @@ function Home() {
           </p>
         </div>
         
-        <div className="grid md:grid-cols-2 gap-6">
-          {accessibleCards.map((card) => {
+        <div className={gridClass}>
+          {accessibleCards.map((card, index) => {
             const Icon = card.icon
             return (
               <Link
                 key={card.path}
                 to={card.path}
                 className="p-6 border rounded-lg hover:bg-accent transition-all duration-300 group hover:-translate-y-1 hover:shadow-lg animate-fadeInUp"
-                style={{ animationDelay: card.delay }}
+                style={{ animationDelay: `${index * 50}ms` }}
               >
                 <div className="flex items-center gap-3 mb-2">
                   <Icon className="w-6 h-6 text-primary transition-transform duration-200 group-hover:scale-110 group-hover:rotate-3" />
@@ -264,7 +269,12 @@ function NotFound() {
 
 function AppContent() {
   const location = useLocation()
-  const { isAuthenticated } = useAuth()
+  const { isAuthenticated, isLoading } = useAuth()
+  
+  // Don't render anything until auth check is complete to prevent flickering
+  if (isLoading) {
+    return null;
+  }
   
   return (
     <>

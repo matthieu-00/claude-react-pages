@@ -1102,11 +1102,11 @@ window.customAlert = function() {
                   size="sm" 
                   onClick={renderTSX} 
                   disabled={isRendering || (!librariesReady && (renderMode === 'tsx' || renderMode === 'combined'))} 
-                  className="relative"
+                  className="relative min-w-[100px]"
                   title="Ctrl+S / Cmd+S"
                 >
                   <Play className={`w-4 h-4 mr-2 transition-transform ${isRendering ? 'animate-spin' : ''}`} />
-                  {(renderMode === 'tsx' || renderMode === 'combined') && !librariesReady ? 'Loading...' : isRendering ? 'Rendering...' : 'Render'}
+                  <span className="inline-block min-w-[70px] text-left">{isRendering ? 'Rendering...' : 'Render'}</span>
                   {isRendering && <span className="absolute inset-0 bg-white/20 animate-pulse rounded" />}
                 </Button>
                 
