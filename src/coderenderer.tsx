@@ -6,6 +6,7 @@ import { PageHeader } from '@/components/ui/page-header';
 import { Card } from '@/components/ui/card';
 import { HelpTooltip } from '@/components/ui/help-tooltip';
 import { Input } from '@/components/ui/input';
+import { useExportGuard } from '@/hooks/useExportGuard';
 
 interface LogEntry {
   type: string;
@@ -83,6 +84,8 @@ window.customAlert = function() {
   alert('Hello from vanilla JS!');
 };`
   });
+
+  const { canExport, ExportGuard } = useExportGuard();
   
   // CR-EW-01: Keyboard Shortcuts & CR-EW-06: Editor Enhancements state
   const [showLineNumbers, setShowLineNumbers] = useState(true);
@@ -266,6 +269,10 @@ window.customAlert = function() {
 
   // CR-EW-04: Export Options
   const exportHTML = () => {
+    if (!canExport) {
+      addLog('error', 'Export functionality is not available with your current access level.');
+      return;
+    }
     if (!htmlContent && !renderedComponent) {
       addLog('error', 'Nothing to export. Please render first.');
       return;
@@ -306,6 +313,10 @@ window.customAlert = function() {
   };
 
   const exportCode = () => {
+    if (!canExport) {
+      addLog('error', 'Export functionality is not available with your current access level.');
+      return;
+    }
     const currentCode = renderMode === 'combined' ? combinedCode[activeEditorTab as keyof CombinedCode] : code;
     const extension = activeEditorTab === 'tsx' ? 'tsx' : activeEditorTab === 'html' ? 'html' : activeEditorTab === 'css' ? 'css' : 'js';
     const blob = new Blob([currentCode], { type: 'text/plain' });
@@ -319,6 +330,10 @@ window.customAlert = function() {
   };
 
   const shareViaURL = () => {
+    if (!canExport) {
+      addLog('error', 'Export functionality is not available with your current access level.');
+      return;
+    }
     const currentCode = renderMode === 'combined' ? JSON.stringify(combinedCode) : code;
     const encoded = encodeURIComponent(currentCode);
     const url = `${window.location.origin}${window.location.pathname}?code=${encoded}&mode=${renderMode}`;
@@ -1007,35 +1022,37 @@ window.customAlert = function() {
                 </Button>
                 
                 {/* Export Options */}
-                <div className="relative group">
-                  <Button variant="outline" size="sm">
-                    <Download className="w-4 h-4 mr-2" />
-                    Export
-                  </Button>
-                  <div className="absolute top-full left-0 mt-1 bg-card border rounded-md shadow-lg opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all z-50 min-w-[160px]">
-                    <button
-                      onClick={exportHTML}
-                      className="w-full text-left px-3 py-2 text-sm hover:bg-muted flex items-center gap-2"
-                    >
-                      <FileText className="w-4 h-4" />
-                      Export HTML
-                    </button>
-                    <button
-                      onClick={exportCode}
-                      className="w-full text-left px-3 py-2 text-sm hover:bg-muted flex items-center gap-2"
-                    >
-                      <Code className="w-4 h-4" />
-                      Export Code
-                    </button>
-                    <button
-                      onClick={shareViaURL}
-                      className="w-full text-left px-3 py-2 text-sm hover:bg-muted flex items-center gap-2"
-                    >
-                      <Share2 className="w-4 h-4" />
-                      Share URL
-                    </button>
+                <ExportGuard>
+                  <div className="relative group">
+                    <Button variant="outline" size="sm">
+                      <Download className="w-4 h-4 mr-2" />
+                      Export
+                    </Button>
+                    <div className="absolute top-full left-0 mt-1 bg-card border rounded-md shadow-lg opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all z-50 min-w-[160px]">
+                      <button
+                        onClick={exportHTML}
+                        className="w-full text-left px-3 py-2 text-sm hover:bg-muted flex items-center gap-2"
+                      >
+                        <FileText className="w-4 h-4" />
+                        Export HTML
+                      </button>
+                      <button
+                        onClick={exportCode}
+                        className="w-full text-left px-3 py-2 text-sm hover:bg-muted flex items-center gap-2"
+                      >
+                        <Code className="w-4 h-4" />
+                        Export Code
+                      </button>
+                      <button
+                        onClick={shareViaURL}
+                        className="w-full text-left px-3 py-2 text-sm hover:bg-muted flex items-center gap-2"
+                      >
+                        <Share2 className="w-4 h-4" />
+                        Share URL
+                      </button>
+                    </div>
                   </div>
-                </div>
+                </ExportGuard>
                 
                 {/* Code Snippets */}
                 <div className="relative group" data-snippets-menu>

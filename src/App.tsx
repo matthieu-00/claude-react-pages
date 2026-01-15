@@ -5,26 +5,38 @@ import PRDeploymentTracker from './deploymenttrracker'
 import JsonExtractor from './jsonextractor'
 import { Code, FileSpreadsheet, GitBranch, Database, Menu, X, Home as HomeIcon } from 'lucide-react'
 import { ThemeProvider } from './contexts/ThemeContext'
+import { AuthProvider, useAuth } from './contexts/AuthContext'
 import { ThemeToggle } from './components/ThemeToggle'
 import { Button } from './components/ui/button'
 import { PocketKnifeIcon } from './components/PocketKnifeIcon'
+import { PinEntryModal } from './components/PinEntryModal'
+import { ProtectedRoute } from './components/ProtectedRoute'
 import { useEffect, useId, useRef, useState } from 'react'
 import './App.css'
 
 function Navigation() {
   const location = useLocation()
+  const { hasPageAccess } = useAuth()
   const [isMobileNavOpen, setIsMobileNavOpen] = useState(false)
   const drawerId = useId()
   const menuButtonRef = useRef<HTMLButtonElement | null>(null)
   const firstLinkRef = useRef<HTMLAnchorElement | null>(null)
   
-  const navItems = [
+  const allNavItems = [
     { path: '/', label: 'Home', icon: PocketKnifeIcon },
     { path: '/code-renderer', label: 'Code Renderer', icon: Code },
     { path: '/spreadsheet-diff', label: 'Spreadsheet Diff', icon: FileSpreadsheet },
     { path: '/deployment-tracker', label: 'Deployment Tracker', icon: GitBranch },
     { path: '/json-extractor', label: 'JSON Extractor', icon: Database },
   ]
+
+  // Filter nav items based on access level
+  const navItems = allNavItems.filter(item => {
+    // Home page is always accessible (not protected)
+    if (item.path === '/') return true
+    // Check if user has access to this page
+    return hasPageAccess(item.path)
+  })
 
   useEffect(() => {
     if (!isMobileNavOpen) return
@@ -153,6 +165,42 @@ function Navigation() {
 }
 
 function Home() {
+  const { hasPageAccess } = useAuth()
+  
+  const toolCards = [
+    {
+      path: '/code-renderer',
+      label: 'Code Renderer',
+      icon: Code,
+      description: 'Render TSX, HTML/CSS/JS, or combined code live in your browser',
+      delay: '0ms'
+    },
+    {
+      path: '/spreadsheet-diff',
+      label: 'Spreadsheet Diff',
+      icon: FileSpreadsheet,
+      description: 'Compare spreadsheets to find differences between them',
+      delay: '100ms'
+    },
+    {
+      path: '/deployment-tracker',
+      label: 'Deployment Tracker',
+      icon: GitBranch,
+      description: 'Track GitHub PRs through the deployment verification process',
+      delay: '200ms'
+    },
+    {
+      path: '/json-extractor',
+      label: 'JSON Extractor',
+      icon: Database,
+      description: 'Extract and compare JSON data fields with advanced filtering',
+      delay: '300ms'
+    }
+  ]
+
+  // Filter cards based on access level
+  const accessibleCards = toolCards.filter(card => hasPageAccess(card.path))
+
   return (
     <div className="min-h-screen bg-background p-4 sm:p-8">
       <div className="max-w-4xl mx-auto">
@@ -164,61 +212,25 @@ function Home() {
         </div>
         
         <div className="grid md:grid-cols-2 gap-6">
-          <Link
-            to="/code-renderer"
-            className="p-6 border rounded-lg hover:bg-accent transition-all duration-300 group hover:-translate-y-1 hover:shadow-lg animate-fadeInUp"
-            style={{ animationDelay: '0ms' }}
-          >
-            <div className="flex items-center gap-3 mb-2">
-              <Code className="w-6 h-6 text-primary transition-transform duration-200 group-hover:scale-110 group-hover:rotate-3" />
-              <h2 className="text-xl font-semibold">Code Renderer</h2>
-            </div>
-            <p className="text-muted-foreground">
-              Render TSX, HTML/CSS/JS, or combined code live in your browser
-            </p>
-          </Link>
-
-          <Link
-            to="/spreadsheet-diff"
-            className="p-6 border rounded-lg hover:bg-accent transition-all duration-300 group hover:-translate-y-1 hover:shadow-lg animate-fadeInUp"
-            style={{ animationDelay: '100ms' }}
-          >
-            <div className="flex items-center gap-3 mb-2">
-              <FileSpreadsheet className="w-6 h-6 text-primary transition-transform duration-200 group-hover:scale-110 group-hover:rotate-3" />
-              <h2 className="text-xl font-semibold">Spreadsheet Diff</h2>
-            </div>
-            <p className="text-muted-foreground">
-              Compare spreadsheets to find differences between them
-            </p>
-          </Link>
-
-          <Link
-            to="/deployment-tracker"
-            className="p-6 border rounded-lg hover:bg-accent transition-all duration-300 group hover:-translate-y-1 hover:shadow-lg animate-fadeInUp"
-            style={{ animationDelay: '200ms' }}
-          >
-            <div className="flex items-center gap-3 mb-2">
-              <GitBranch className="w-6 h-6 text-primary transition-transform duration-200 group-hover:scale-110 group-hover:rotate-3" />
-              <h2 className="text-xl font-semibold">Deployment Tracker</h2>
-            </div>
-            <p className="text-muted-foreground">
-              Track GitHub PRs through the deployment verification process
-            </p>
-          </Link>
-
-          <Link
-            to="/json-extractor"
-            className="p-6 border rounded-lg hover:bg-accent transition-all duration-300 group hover:-translate-y-1 hover:shadow-lg animate-fadeInUp"
-            style={{ animationDelay: '300ms' }}
-          >
-            <div className="flex items-center gap-3 mb-2">
-              <Database className="w-6 h-6 text-primary transition-transform duration-200 group-hover:scale-110 group-hover:rotate-3" />
-              <h2 className="text-xl font-semibold">JSON Extractor</h2>
-            </div>
-            <p className="text-muted-foreground">
-              Extract and compare JSON data fields with advanced filtering
-            </p>
-          </Link>
+          {accessibleCards.map((card) => {
+            const Icon = card.icon
+            return (
+              <Link
+                key={card.path}
+                to={card.path}
+                className="p-6 border rounded-lg hover:bg-accent transition-all duration-300 group hover:-translate-y-1 hover:shadow-lg animate-fadeInUp"
+                style={{ animationDelay: card.delay }}
+              >
+                <div className="flex items-center gap-3 mb-2">
+                  <Icon className="w-6 h-6 text-primary transition-transform duration-200 group-hover:scale-110 group-hover:rotate-3" />
+                  <h2 className="text-xl font-semibold">{card.label}</h2>
+                </div>
+                <p className="text-muted-foreground">
+                  {card.description}
+                </p>
+              </Link>
+            )
+          })}
         </div>
       </div>
     </div>
@@ -250,22 +262,62 @@ function NotFound() {
   )
 }
 
-function App() {
+function AppContent() {
   const location = useLocation()
+  const { isAuthenticated } = useAuth()
   
   return (
-    <ThemeProvider>
+    <>
+      {!isAuthenticated && <PinEntryModal />}
       <Navigation />
       <div key={location.pathname} className="animate-fadeIn">
         <Routes location={location}>
           <Route path="/" element={<Home />} />
-          <Route path="/code-renderer" element={<LiveCodeRenderer />} />
-          <Route path="/spreadsheet-diff" element={<SpreadsheetComparator />} />
-          <Route path="/deployment-tracker" element={<PRDeploymentTracker />} />
-          <Route path="/json-extractor" element={<JsonExtractor />} />
+          <Route 
+            path="/code-renderer" 
+            element={
+              <ProtectedRoute path="/code-renderer">
+                <LiveCodeRenderer />
+              </ProtectedRoute>
+            } 
+          />
+          <Route 
+            path="/spreadsheet-diff" 
+            element={
+              <ProtectedRoute path="/spreadsheet-diff">
+                <SpreadsheetComparator />
+              </ProtectedRoute>
+            } 
+          />
+          <Route 
+            path="/deployment-tracker" 
+            element={
+              <ProtectedRoute path="/deployment-tracker">
+                <PRDeploymentTracker />
+              </ProtectedRoute>
+            } 
+          />
+          <Route 
+            path="/json-extractor" 
+            element={
+              <ProtectedRoute path="/json-extractor">
+                <JsonExtractor />
+              </ProtectedRoute>
+            } 
+          />
           <Route path="*" element={<NotFound />} />
         </Routes>
       </div>
+    </>
+  )
+}
+
+function App() {
+  return (
+    <ThemeProvider>
+      <AuthProvider>
+        <AppContent />
+      </AuthProvider>
     </ThemeProvider>
   )
 }

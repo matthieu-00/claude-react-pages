@@ -6,6 +6,7 @@ import { PageHeader } from '@/components/ui/page-header';
 import { Textarea } from '@/components/ui/input';
 import { HelpTooltip } from '@/components/ui/help-tooltip';
 import { Button } from '@/components/ui/button';
+import { useExportGuard } from '@/hooks/useExportGuard';
 
 type JsonValue = string | number | boolean | null | JsonObject | JsonValue[];
 interface JsonObject extends Record<string, JsonValue> {}
@@ -26,6 +27,7 @@ interface ComparisonField {
 
 export default function JsonExtractor() {
   const { theme } = useTheme();
+  const { canExport, ExportGuard } = useExportGuard();
   const [mode, setMode] = useState<'extract' | 'compare'>('extract');
   const [jsonData, setJsonData] = useState<JsonObject[]>([]);
   const [jsonDataB, setJsonDataB] = useState<JsonObject[]>([]);
@@ -621,6 +623,10 @@ export default function JsonExtractor() {
   };
 
   const exportToCSV = () => {
+    if (!canExport) {
+      alert('Export functionality is not available with your current access level.');
+      return;
+    }
     if (filteredData.length === 0) {
       alert('No data to export. Please select some fields first.');
       return;
@@ -685,6 +691,10 @@ export default function JsonExtractor() {
   };
 
   const exportToJSON = () => {
+    if (!canExport) {
+      alert('Export functionality is not available with your current access level.');
+      return;
+    }
     if (filteredData.length === 0) {
       alert('No data to export. Please select some fields first.');
       return;
@@ -1282,22 +1292,24 @@ export default function JsonExtractor() {
               </div>
 
               <div className="flex flex-wrap gap-2 md:gap-3 mb-6">
-                <button
-                  onClick={exportToCSV}
-                  disabled={selectedKeys.size === 0}
-                  className="flex items-center gap-2 px-4 md:px-6 py-2 md:py-3 rounded-lg font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed text-sm md:text-base bg-accent text-accent-foreground"
-                >
-                  <Download className="w-4 h-4 md:w-5 md:h-5" />
-                  Export CSV
-                </button>
-                <button
-                  onClick={exportToJSON}
-                  disabled={selectedKeys.size === 0}
-                  className="flex items-center gap-2 px-4 md:px-6 py-2 md:py-3 rounded-lg font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed text-sm md:text-base bg-accent text-accent-foreground"
-                >
-                  <Download className="w-4 h-4 md:w-5 md:h-5" />
-                  Export JSON
-                </button>
+                <ExportGuard>
+                  <button
+                    onClick={exportToCSV}
+                    disabled={selectedKeys.size === 0}
+                    className="flex items-center gap-2 px-4 md:px-6 py-2 md:py-3 rounded-lg font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed text-sm md:text-base bg-accent text-accent-foreground"
+                  >
+                    <Download className="w-4 h-4 md:w-5 md:h-5" />
+                    Export CSV
+                  </button>
+                  <button
+                    onClick={exportToJSON}
+                    disabled={selectedKeys.size === 0}
+                    className="flex items-center gap-2 px-4 md:px-6 py-2 md:py-3 rounded-lg font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed text-sm md:text-base bg-accent text-accent-foreground"
+                  >
+                    <Download className="w-4 h-4 md:w-5 md:h-5" />
+                    Export JSON
+                  </button>
+                </ExportGuard>
               </div>
 
               {selectedKeys.size > 0 && (

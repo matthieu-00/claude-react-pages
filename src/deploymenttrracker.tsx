@@ -7,6 +7,7 @@ import { Card } from '@/components/ui/card';
 import { Textarea, Input } from '@/components/ui/input';
 import { HelpTooltip } from '@/components/ui/help-tooltip';
 import { Button } from '@/components/ui/button';
+import { useExportGuard } from '@/hooks/useExportGuard';
 
 interface Card {
   id: number;
@@ -54,6 +55,7 @@ interface ImportedData {
 
 const PRDeploymentTracker = () => {
   const { theme } = useTheme();
+  const { canExport, ExportGuard } = useExportGuard();
   const [inputUrls, setInputUrls] = useState('');
   const [cards, setCards] = useState<Card[]>([]);
   const [draggedCard, setDraggedCard] = useState<Card | null>(null);
@@ -1064,6 +1066,10 @@ const PRDeploymentTracker = () => {
 
   // DT-EW-06: Export Enhancements
   const exportFilteredJSON = () => {
+    if (!canExport) {
+      showToast('Export functionality is not available with your current access level.');
+      return;
+    }
     const data = {
       exportDate: new Date().toISOString(),
       cards: filteredCards,
@@ -1084,6 +1090,10 @@ const PRDeploymentTracker = () => {
   };
 
   const exportMarkdownTable = () => {
+    if (!canExport) {
+      showToast('Export functionality is not available with your current access level.');
+      return;
+    }
     let markdown = `# Deployment Tracker Export\n\n`;
     markdown += `Generated: ${new Date().toLocaleString()}\n\n`;
     markdown += `| Column | Title | URL | Notes |\n`;
@@ -1107,6 +1117,10 @@ const PRDeploymentTracker = () => {
   };
 
   const copyFullStatusReport = async () => {
+    if (!canExport) {
+      showToast('Export functionality is not available with your current access level.');
+      return;
+    }
     const now = new Date();
     const month = now.getMonth() + 1;
     const day = now.getDate();
@@ -1167,6 +1181,10 @@ const PRDeploymentTracker = () => {
   };
 
   const copyReleaseList = async () => {
+    if (!canExport) {
+      showToast('Export functionality is not available with your current access level.');
+      return;
+    }
     const now = new Date();
     const month = now.getMonth() + 1;
     const day = now.getDate();
@@ -1745,44 +1763,46 @@ const PRDeploymentTracker = () => {
         </Card>
 
         {/* Export Menu */}
-        <div className="mb-6 flex justify-end">
-          <div className="relative group">
-            <Button variant="outline" size="sm">
-              <Download className="w-4 h-4 mr-2" />
-              Export
-            </Button>
-            <div className="absolute top-full right-0 mt-1 bg-card border rounded-md shadow-lg opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all z-50 min-w-[200px]">
-              <button
-                onClick={() => setShowReleaseModal(true)}
-                className="w-full text-left px-3 py-2 text-sm hover:bg-muted flex items-center gap-2"
-              >
-                <Copy className="w-4 h-4" />
-                Copy Release List
-              </button>
-              <button
-                onClick={() => setShowExportModal(true)}
-                className="w-full text-left px-3 py-2 text-sm hover:bg-muted flex items-center gap-2"
-              >
-                <Copy className="w-4 h-4" />
-                Copy Full Status Report
-              </button>
-              <button
-                onClick={exportFilteredJSON}
-                className="w-full text-left px-3 py-2 text-sm hover:bg-muted flex items-center gap-2"
-              >
-                <FileJson className="w-4 h-4" />
-                Export JSON
-              </button>
-              <button
-                onClick={exportMarkdownTable}
-                className="w-full text-left px-3 py-2 text-sm hover:bg-muted flex items-center gap-2"
-              >
-                <FileText className="w-4 h-4" />
-                Export Markdown
-              </button>
+        <ExportGuard>
+          <div className="mb-6 flex justify-end">
+            <div className="relative group">
+              <Button variant="outline" size="sm">
+                <Download className="w-4 h-4 mr-2" />
+                Export
+              </Button>
+              <div className="absolute top-full right-0 mt-1 bg-card border rounded-md shadow-lg opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all z-50 min-w-[200px]">
+                <button
+                  onClick={() => setShowReleaseModal(true)}
+                  className="w-full text-left px-3 py-2 text-sm hover:bg-muted flex items-center gap-2"
+                >
+                  <Copy className="w-4 h-4" />
+                  Copy Release List
+                </button>
+                <button
+                  onClick={() => setShowExportModal(true)}
+                  className="w-full text-left px-3 py-2 text-sm hover:bg-muted flex items-center gap-2"
+                >
+                  <Copy className="w-4 h-4" />
+                  Copy Full Status Report
+                </button>
+                <button
+                  onClick={exportFilteredJSON}
+                  className="w-full text-left px-3 py-2 text-sm hover:bg-muted flex items-center gap-2"
+                >
+                  <FileJson className="w-4 h-4" />
+                  Export JSON
+                </button>
+                <button
+                  onClick={exportMarkdownTable}
+                  className="w-full text-left px-3 py-2 text-sm hover:bg-muted flex items-center gap-2"
+                >
+                  <FileText className="w-4 h-4" />
+                  Export Markdown
+                </button>
+              </div>
             </div>
           </div>
-        </div>
+        </ExportGuard>
 
         {/* Release List Modal */}
         {showReleaseModal && (

@@ -9,6 +9,7 @@ import { Card } from '@/components/ui/card';
 import { Input, Textarea } from '@/components/ui/input';
 import { HelpTooltip } from '@/components/ui/help-tooltip';
 import { Button } from '@/components/ui/button';
+import { useExportGuard } from '@/hooks/useExportGuard';
 
 type SpreadsheetRow = Record<string, string | number | null | undefined>;
 
@@ -31,6 +32,8 @@ export default function SpreadsheetComparator() {
   const [showOnlyDiffs, _setShowOnlyDiffs] = useState(false);
   const [ignoredColumns, _setIgnoredColumns] = useState<Set<string>>(new Set());
   const [showStats, setShowStats] = useState(true);
+
+  const { canExport, ExportGuard } = useExportGuard();
 
   const getExcelColumnLetter = (index: number): string => {
     let letter = '';
@@ -248,6 +251,10 @@ export default function SpreadsheetComparator() {
   };
 
   const exportToCSV = () => {
+    if (!canExport) {
+      alert('Export functionality is not available with your current access level.');
+      return;
+    }
     interface DifferenceRow {
       column: string;
       rowIndex: number;
@@ -333,6 +340,10 @@ export default function SpreadsheetComparator() {
 
   // SD-EW-04: Export Enhancements
   const exportToExcel = () => {
+    if (!canExport) {
+      alert('Export functionality is not available with your current access level.');
+      return;
+    }
     if (!data1 || !data2) return;
     
     const wb = XLSX.utils.book_new();
@@ -358,6 +369,10 @@ export default function SpreadsheetComparator() {
   };
 
   const exportSummaryReport = () => {
+    if (!canExport) {
+      alert('Export functionality is not available with your current access level.');
+      return;
+    }
     const report = `Spreadsheet Comparison Report
 Generated: ${new Date().toLocaleString()}
 
@@ -626,29 +641,31 @@ ${statistics.mostChangedColumns.map((col, i) => `${i + 1}. ${col.name}: ${col.co
                       />
                     </div>
                   </label>
-                  <div className="flex gap-2">
-                    <Button 
-                      variant="outline"
-                      size="sm"
-                      onClick={() => setShowExportModal(true)}
-                    >
-                      <Download className="w-3 h-3 mr-1" /> CSV
-                    </Button>
-                    <Button 
-                      variant="outline"
-                      size="sm"
-                      onClick={exportToExcel}
-                    >
-                      <FileSpreadsheet className="w-3 h-3 mr-1" /> Excel
-                    </Button>
-                    <Button 
-                      variant="outline"
-                      size="sm"
-                      onClick={exportSummaryReport}
-                    >
-                      <FileSpreadsheet className="w-3 h-3 mr-1" /> Summary
-                    </Button>
-                  </div>
+                  <ExportGuard>
+                    <div className="flex gap-2">
+                      <Button 
+                        variant="outline"
+                        size="sm"
+                        onClick={() => setShowExportModal(true)}
+                      >
+                        <Download className="w-3 h-3 mr-1" /> CSV
+                      </Button>
+                      <Button 
+                        variant="outline"
+                        size="sm"
+                        onClick={exportToExcel}
+                      >
+                        <FileSpreadsheet className="w-3 h-3 mr-1" /> Excel
+                      </Button>
+                      <Button 
+                        variant="outline"
+                        size="sm"
+                        onClick={exportSummaryReport}
+                      >
+                        <FileSpreadsheet className="w-3 h-3 mr-1" /> Summary
+                      </Button>
+                    </div>
+                  </ExportGuard>
                 </div>
               </div>
             </>
