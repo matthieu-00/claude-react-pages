@@ -633,6 +633,7 @@ ${statistics.mostChangedColumns.map((col, i) => `${i + 1}. ${col.name}: ${col.co
                         hideIdentical ? 'bg-accent' : 'bg-muted'
                       }`}
                       onClick={() => setHideIdentical(!hideIdentical)}
+                      data-testid="hide-identical-toggle"
                     >
                       <div 
                         className={`absolute top-0.5 left-0.5 w-5 h-5 bg-card rounded-full transition-transform ${
@@ -647,6 +648,7 @@ ${statistics.mostChangedColumns.map((col, i) => `${i + 1}. ${col.name}: ${col.co
                         variant="outline"
                         size="sm"
                         onClick={() => setShowExportModal(true)}
+                        data-testid="export-csv"
                       >
                         <Download className="w-3 h-3 mr-1" /> CSV
                       </Button>
@@ -654,6 +656,7 @@ ${statistics.mostChangedColumns.map((col, i) => `${i + 1}. ${col.name}: ${col.co
                         variant="outline"
                         size="sm"
                         onClick={exportToExcel}
+                        data-testid="export-excel"
                       >
                         <FileSpreadsheet className="w-3 h-3 mr-1" /> Excel
                       </Button>
@@ -661,6 +664,7 @@ ${statistics.mostChangedColumns.map((col, i) => `${i + 1}. ${col.name}: ${col.co
                         variant="outline"
                         size="sm"
                         onClick={exportSummaryReport}
+                        data-testid="export-summary"
                       >
                         <FileSpreadsheet className="w-3 h-3 mr-1" /> Summary
                       </Button>

@@ -38,7 +38,7 @@ export function PinEntryModal() {
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-background/95 backdrop-blur-sm">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-background/95 backdrop-blur-sm" data-testid="pin-modal">
       <div className="w-full max-w-md mx-4">
         <div className="bg-card border rounded-lg shadow-lg p-8">
           <div className="flex flex-col items-center mb-6">
@@ -68,6 +68,7 @@ export function PinEntryModal() {
                 className="text-center text-lg tracking-wider"
                 autoComplete="off"
                 autoFocus
+                data-testid="pin-input"
               />
             </div>
 
@@ -82,6 +83,7 @@ export function PinEntryModal() {
               type="submit"
               className="w-full"
               disabled={isLoading || !pin.trim()}
+              data-testid="pin-submit"
             >
               {isLoading ? 'Verifying...' : 'Submit'}
             </Button>

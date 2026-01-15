@@ -1024,14 +1024,15 @@ window.customAlert = function() {
                 {/* Export Options */}
                 <ExportGuard>
                   <div className="relative group">
-                    <Button variant="outline" size="sm">
+                    <Button variant="outline" size="sm" data-testid="code-renderer-export-button">
                       <Download className="w-4 h-4 mr-2" />
                       Export
                     </Button>
-                    <div className="absolute top-full left-0 mt-1 bg-card border rounded-md shadow-lg opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all z-50 min-w-[160px]">
+                    <div className="absolute top-full left-0 mt-1 bg-card border rounded-md shadow-lg opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all z-50 min-w-[160px]" data-testid="code-renderer-export-menu">
                       <button
                         onClick={exportHTML}
                         className="w-full text-left px-3 py-2 text-sm hover:bg-muted flex items-center gap-2"
+                        data-testid="export-html"
                       >
                         <FileText className="w-4 h-4" />
                         Export HTML
@@ -1039,6 +1040,7 @@ window.customAlert = function() {
                       <button
                         onClick={exportCode}
                         className="w-full text-left px-3 py-2 text-sm hover:bg-muted flex items-center gap-2"
+                        data-testid="export-code"
                       >
                         <Code className="w-4 h-4" />
                         Export Code
@@ -1046,6 +1048,7 @@ window.customAlert = function() {
                       <button
                         onClick={shareViaURL}
                         className="w-full text-left px-3 py-2 text-sm hover:bg-muted flex items-center gap-2"
+                        data-testid="share-url"
                       >
                         <Share2 className="w-4 h-4" />
                         Share URL

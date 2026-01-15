@@ -1766,14 +1766,15 @@ const PRDeploymentTracker = () => {
         <ExportGuard>
           <div className="mb-6 flex justify-end">
             <div className="relative group">
-              <Button variant="outline" size="sm">
+              <Button variant="outline" size="sm" data-testid="deployment-tracker-export-button">
                 <Download className="w-4 h-4 mr-2" />
                 Export
               </Button>
-              <div className="absolute top-full right-0 mt-1 bg-card border rounded-md shadow-lg opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all z-50 min-w-[200px]">
+              <div className="absolute top-full right-0 mt-1 bg-card border rounded-md shadow-lg opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all z-50 min-w-[200px]" data-testid="deployment-tracker-export-menu">
                 <button
                   onClick={() => setShowReleaseModal(true)}
                   className="w-full text-left px-3 py-2 text-sm hover:bg-muted flex items-center gap-2"
+                  data-testid="export-release-list"
                 >
                   <Copy className="w-4 h-4" />
                   Copy Release List
@@ -1781,6 +1782,7 @@ const PRDeploymentTracker = () => {
                 <button
                   onClick={() => setShowExportModal(true)}
                   className="w-full text-left px-3 py-2 text-sm hover:bg-muted flex items-center gap-2"
+                  data-testid="export-status-report"
                 >
                   <Copy className="w-4 h-4" />
                   Copy Full Status Report
@@ -1788,6 +1790,7 @@ const PRDeploymentTracker = () => {
                 <button
                   onClick={exportFilteredJSON}
                   className="w-full text-left px-3 py-2 text-sm hover:bg-muted flex items-center gap-2"
+                  data-testid="export-json"
                 >
                   <FileJson className="w-4 h-4" />
                   Export JSON
@@ -1795,6 +1798,7 @@ const PRDeploymentTracker = () => {
                 <button
                   onClick={exportMarkdownTable}
                   className="w-full text-left px-3 py-2 text-sm hover:bg-muted flex items-center gap-2"
+                  data-testid="export-markdown"
                 >
                   <FileText className="w-4 h-4" />
                   Export Markdown

@@ -26,7 +26,7 @@ export function ProtectedRoute({ children, path }: ProtectedRouteProps) {
   // Check if user has access to this specific path
   if (!hasPageAccess(path)) {
     return (
-      <div className="min-h-screen bg-background flex items-center justify-center p-4">
+      <div className="min-h-screen bg-background flex items-center justify-center p-4" data-testid="access-denied">
         <Card variant="elevated-xl" padding="lg" className="max-w-md w-full">
           <div className="text-center">
             <div className="w-16 h-16 rounded-full bg-destructive/10 flex items-center justify-center mx-auto mb-4">
@@ -39,6 +39,7 @@ export function ProtectedRoute({ children, path }: ProtectedRouteProps) {
             <Button
               onClick={() => window.location.href = '/'}
               variant="default"
+              data-testid="access-denied-return-home"
             >
               <HomeIcon className="w-4 h-4 mr-2" />
               Return Home
