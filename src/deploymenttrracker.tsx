@@ -87,6 +87,8 @@ const PRDeploymentTracker = () => {
   const [bulkTitleInput, setBulkTitleInput] = useState('');
   const [showBulkMoveMenu, setShowBulkMoveMenu] = useState(false);
   const searchInputRef = useRef<HTMLInputElement>(null);
+  const [showExportMenu, setShowExportMenu] = useState(false);
+  const exportMenuRef = useRef<HTMLDivElement>(null);
 
   const columns = [
     { id: 'yet-to-verify', title: 'Yet to Verify', color: 'bg-accent/10 border-accent/30' },
@@ -1035,6 +1037,23 @@ const PRDeploymentTracker = () => {
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [selectedCards, filteredCards, columns]);
 
+  // Close export menu when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (exportMenuRef.current && !exportMenuRef.current.contains(event.target as Node)) {
+        setShowExportMenu(false);
+      }
+    };
+
+    if (showExportMenu) {
+      document.addEventListener('mousedown', handleClickOutside);
+      return () => {
+        document.removeEventListener('mousedown', handleClickOutside);
+      };
+    }
+    return undefined;
+  }, [showExportMenu]);
+
   // DT-EW-05: Statistics Dashboard
   const statistics = useMemo(() => {
     const cardsPerColumn: Record<string, number> = {};
@@ -1765,45 +1784,64 @@ const PRDeploymentTracker = () => {
         {/* Export Menu */}
         <ExportGuard>
           <div className="mb-6 flex justify-end">
-            <div className="relative group">
-              <Button variant="outline" size="sm" data-testid="deployment-tracker-export-button">
+            <div className="relative" ref={exportMenuRef}>
+              <Button 
+                variant="outline" 
+                size="sm" 
+                onClick={() => setShowExportMenu(!showExportMenu)}
+                data-testid="deployment-tracker-export-button"
+              >
                 <Download className="w-4 h-4 mr-2" />
                 Export
               </Button>
-              <div className="absolute top-full right-0 mt-1 bg-card border rounded-md shadow-lg opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all z-50 min-w-[200px]" data-testid="deployment-tracker-export-menu">
-                <button
-                  onClick={() => setShowReleaseModal(true)}
-                  className="w-full text-left px-3 py-2 text-sm hover:bg-muted flex items-center gap-2"
-                  data-testid="export-release-list"
-                >
-                  <Copy className="w-4 h-4" />
-                  Copy Release List
-                </button>
-                <button
-                  onClick={() => setShowExportModal(true)}
-                  className="w-full text-left px-3 py-2 text-sm hover:bg-muted flex items-center gap-2"
-                  data-testid="export-status-report"
-                >
-                  <Copy className="w-4 h-4" />
-                  Copy Full Status Report
-                </button>
-                <button
-                  onClick={exportFilteredJSON}
-                  className="w-full text-left px-3 py-2 text-sm hover:bg-muted flex items-center gap-2"
-                  data-testid="export-json"
-                >
-                  <FileJson className="w-4 h-4" />
-                  Export JSON
-                </button>
-                <button
-                  onClick={exportMarkdownTable}
-                  className="w-full text-left px-3 py-2 text-sm hover:bg-muted flex items-center gap-2"
-                  data-testid="export-markdown"
-                >
-                  <FileText className="w-4 h-4" />
-                  Export Markdown
-                </button>
-              </div>
+              {showExportMenu && (
+                <div className="absolute top-full right-0 mt-1 bg-card border rounded-md shadow-lg z-50 min-w-[200px]" data-testid="deployment-tracker-export-menu">
+                  <button
+                    onClick={() => {
+                      setShowExportMenu(false);
+                      setShowReleaseModal(true);
+                    }}
+                    className="w-full text-left px-3 py-2 text-sm hover:bg-muted flex items-center gap-2"
+                    data-testid="export-release-list"
+                  >
+                    <Copy className="w-4 h-4" />
+                    Copy Release List
+                  </button>
+                  <button
+                    onClick={() => {
+                      setShowExportMenu(false);
+                      setShowExportModal(true);
+                    }}
+                    className="w-full text-left px-3 py-2 text-sm hover:bg-muted flex items-center gap-2"
+                    data-testid="export-status-report"
+                  >
+                    <Copy className="w-4 h-4" />
+                    Copy Full Status Report
+                  </button>
+                  <button
+                    onClick={() => {
+                      setShowExportMenu(false);
+                      exportFilteredJSON();
+                    }}
+                    className="w-full text-left px-3 py-2 text-sm hover:bg-muted flex items-center gap-2"
+                    data-testid="export-json"
+                  >
+                    <FileJson className="w-4 h-4" />
+                    Export JSON
+                  </button>
+                  <button
+                    onClick={() => {
+                      setShowExportMenu(false);
+                      exportMarkdownTable();
+                    }}
+                    className="w-full text-left px-3 py-2 text-sm hover:bg-muted flex items-center gap-2"
+                    data-testid="export-markdown"
+                  >
+                    <FileText className="w-4 h-4" />
+                    Export Markdown
+                  </button>
+                </div>
+              )}
             </div>
           </div>
         </ExportGuard>

@@ -1,3 +1,4 @@
+import { useState, useEffect, useRef } from 'react';
 import { EditorView } from '@codemirror/view';
 import {
   Bold,
@@ -27,11 +28,29 @@ interface ToolbarProps {
   onExportPDF?: () => void;
   onCopyMarkdown?: () => void;
   onCopyHTML?: () => void;
-  onCopyPlaintext?: () => void;
 }
 
-export function Toolbar({ editorView, onInsertTable, onExportHTML, onExportPDF, onCopyMarkdown, onCopyHTML, onCopyPlaintext }: ToolbarProps) {
+export function Toolbar({ editorView, onInsertTable, onExportHTML, onExportPDF, onCopyMarkdown, onCopyHTML }: ToolbarProps) {
   const { ExportGuard } = useExportGuard();
+  const [showExportMenu, setShowExportMenu] = useState(false);
+  const exportMenuRef = useRef<HTMLDivElement>(null);
+
+  // Close menu when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (exportMenuRef.current && !exportMenuRef.current.contains(event.target as Node)) {
+        setShowExportMenu(false);
+      }
+    };
+
+    if (showExportMenu) {
+      document.addEventListener('mousedown', handleClickOutside);
+      return () => {
+        document.removeEventListener('mousedown', handleClickOutside);
+      };
+    }
+    return undefined;
+  }, [showExportMenu]);
   const insertText = (before: string, after: string = '') => {
     if (!editorView) return;
 
@@ -287,58 +306,67 @@ export function Toolbar({ editorView, onInsertTable, onExportHTML, onExportPDF, 
 
       {/* Export Options */}
       <ExportGuard>
-        <div className="relative group">
-          <Button variant="outline" size="sm">
+        <div className="relative" ref={exportMenuRef}>
+          <Button 
+            variant="outline" 
+            size="sm"
+            onClick={() => setShowExportMenu(!showExportMenu)}
+          >
             <Download className="w-4 h-4 mr-2" />
             Export
           </Button>
-          <div className="absolute top-full left-0 mt-1 bg-card border rounded-md shadow-lg opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all z-50 min-w-[160px]">
-            {onExportHTML && (
-              <button
-                onClick={onExportHTML}
-                className="w-full text-left px-3 py-2 text-sm hover:bg-muted flex items-center gap-2"
-              >
-                <FileText className="w-4 h-4" />
-                Export HTML
-              </button>
-            )}
-            {onExportPDF && (
-              <button
-                onClick={onExportPDF}
-                className="w-full text-left px-3 py-2 text-sm hover:bg-muted flex items-center gap-2"
-              >
-                <FileText className="w-4 h-4" />
-                Export PDF
-              </button>
-            )}
-            {onCopyHTML && (
-              <button
-                onClick={onCopyHTML}
-                className="w-full text-left px-3 py-2 text-sm hover:bg-muted flex items-center gap-2"
-              >
-                <Clipboard className="w-4 h-4" />
-                Copy HTML
-              </button>
-            )}
-            {onCopyMarkdown && (
-              <button
-                onClick={onCopyMarkdown}
-                className="w-full text-left px-3 py-2 text-sm hover:bg-muted flex items-center gap-2"
-              >
-                <Clipboard className="w-4 h-4" />
-                Copy Markdown
-              </button>
-            )}
-            {onCopyPlaintext && (
-              <button
-                onClick={onCopyPlaintext}
-                className="w-full text-left px-3 py-2 text-sm hover:bg-muted flex items-center gap-2"
-              >
-                <Clipboard className="w-4 h-4" />
-                Copy Plain Text
-              </button>
-            )}
-          </div>
+          {showExportMenu && (
+            <div className="absolute top-full left-0 mt-1 bg-card border rounded-md shadow-lg z-50 min-w-[160px]">
+              {onExportHTML && (
+                <button
+                  onClick={() => {
+                    setShowExportMenu(false);
+                    onExportHTML();
+                  }}
+                  className="w-full text-left px-3 py-2 text-sm hover:bg-muted flex items-center gap-2"
+                >
+                  <FileText className="w-4 h-4" />
+                  Export HTML
+                </button>
+              )}
+              {onExportPDF && (
+                <button
+                  onClick={() => {
+                    setShowExportMenu(false);
+                    onExportPDF();
+                  }}
+                  className="w-full text-left px-3 py-2 text-sm hover:bg-muted flex items-center gap-2"
+                >
+                  <FileText className="w-4 h-4" />
+                  Export PDF
+                </button>
+              )}
+              {onCopyHTML && (
+                <button
+                  onClick={() => {
+                    setShowExportMenu(false);
+                    onCopyHTML();
+                  }}
+                  className="w-full text-left px-3 py-2 text-sm hover:bg-muted flex items-center gap-2"
+                >
+                  <Clipboard className="w-4 h-4" />
+                  Copy HTML
+                </button>
+              )}
+              {onCopyMarkdown && (
+                <button
+                  onClick={() => {
+                    setShowExportMenu(false);
+                    onCopyMarkdown();
+                  }}
+                  className="w-full text-left px-3 py-2 text-sm hover:bg-muted flex items-center gap-2"
+                >
+                  <Clipboard className="w-4 h-4" />
+                  Copy Markdown
+                </button>
+              )}
+            </div>
+          )}
         </div>
       </ExportGuard>
     </div>

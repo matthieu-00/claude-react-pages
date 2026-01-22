@@ -201,13 +201,17 @@ export default function MarkdownEditor() {
       showToast('Export functionality is not available with your current access level.');
       return;
     }
-    if (!activeFile) return;
-    const html = exportToHTML(content, { theme, title: activeFile.name });
+    if (!content || content.trim().length === 0) {
+      showToast('No content to export');
+      return;
+    }
+    const fileName = activeFile?.name || 'document';
+    const html = exportToHTML(content, { theme, title: fileName });
     const blob = new Blob([html], { type: 'text/html' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `${activeFile.name.replace(/\.md$/, '')}.html`;
+    a.download = `${fileName.replace(/\.md$/, '')}.html`;
     a.click();
     URL.revokeObjectURL(url);
     showToast('HTML exported successfully');
@@ -218,9 +222,13 @@ export default function MarkdownEditor() {
       showToast('Export functionality is not available with your current access level.');
       return;
     }
-    if (!activeFile) return;
+    if (!content || content.trim().length === 0) {
+      showToast('No content to export');
+      return;
+    }
     try {
-      await exportToPDF(content, { theme, title: activeFile.name });
+      const fileName = activeFile?.name || 'document';
+      await exportToPDF(content, { theme, title: fileName });
       showToast('PDF exported successfully');
     } catch (error) {
       console.error('Error exporting PDF:', error);
@@ -231,6 +239,10 @@ export default function MarkdownEditor() {
   const handleCopyMarkdown = async () => {
     if (!canExport) {
       showToast('Export functionality is not available with your current access level.');
+      return;
+    }
+    if (!content || content.trim().length === 0) {
+      showToast('No content to copy');
       return;
     }
     const success = await copyAsMarkdown(content);
@@ -246,6 +258,10 @@ export default function MarkdownEditor() {
       showToast('Export functionality is not available with your current access level.');
       return;
     }
+    if (!content || content.trim().length === 0) {
+      showToast('No content to copy');
+      return;
+    }
     const success = await copyAsHTML(content, { theme });
     if (success) {
       showToast('HTML copied to clipboard');
@@ -254,19 +270,6 @@ export default function MarkdownEditor() {
     }
   };
 
-  const handleCopyPlaintext = async () => {
-    if (!canExport) {
-      showToast('Export functionality is not available with your current access level.');
-      return;
-    }
-    try {
-      await navigator.clipboard.writeText(content);
-      showToast('Plain text copied to clipboard');
-    } catch (error) {
-      console.error('Error copying plaintext to clipboard:', error);
-      showToast('Failed to copy plain text to clipboard');
-    }
-  };
 
   const handleInsertImage = () => {
     if (!editorView || !imageUrl.trim()) return;
@@ -436,7 +439,6 @@ export default function MarkdownEditor() {
                 onExportPDF={handleExportPDF}
                 onCopyMarkdown={handleCopyMarkdown}
                 onCopyHTML={handleCopyHTML}
-                onCopyPlaintext={handleCopyPlaintext}
               />
               <div className="flex items-center gap-1 p-2 border-l">
                 <button

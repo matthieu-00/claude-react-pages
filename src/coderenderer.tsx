@@ -94,6 +94,8 @@ window.customAlert = function() {
   const [showFindDialog, setShowFindDialog] = useState(false);
   const [findTerm, setFindTerm] = useState('');
   const [showSnippetsMenu, setShowSnippetsMenu] = useState(false);
+  const [showExportMenu, setShowExportMenu] = useState(false);
+  const exportMenuRef = useRef<HTMLDivElement>(null);
   const [snippets, setSnippets] = useState<Record<string, { name: string; code: string; mode: 'tsx' | 'html' | 'combined' }>>({});
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const [prettierReady, setPrettierReady] = useState(false);
@@ -443,13 +445,16 @@ window.customAlert = function() {
       if (!target.closest('.group') && !target.closest('[data-snippets-menu]')) {
         setShowSnippetsMenu(false);
       }
+      if (exportMenuRef.current && !exportMenuRef.current.contains(target)) {
+        setShowExportMenu(false);
+      }
     };
-    if (showSnippetsMenu) {
+    if (showSnippetsMenu || showExportMenu) {
       document.addEventListener('mousedown', handleClickOutside);
       return () => document.removeEventListener('mousedown', handleClickOutside);
     }
     return undefined;
-  }, [showSnippetsMenu]);
+  }, [showSnippetsMenu, showExportMenu]);
 
   const handleClearRender = () => {
     // Remove any injected CSS from Combined mode
@@ -1023,37 +1028,53 @@ window.customAlert = function() {
                 
                 {/* Export Options */}
                 <ExportGuard>
-                  <div className="relative group">
-                    <Button variant="outline" size="sm" data-testid="code-renderer-export-button">
+                  <div className="relative" ref={exportMenuRef}>
+                    <Button 
+                      variant="outline" 
+                      size="sm" 
+                      onClick={() => setShowExportMenu(!showExportMenu)}
+                      data-testid="code-renderer-export-button"
+                    >
                       <Download className="w-4 h-4 mr-2" />
                       Export
                     </Button>
-                    <div className="absolute top-full left-0 mt-1 bg-card border rounded-md shadow-lg opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all z-50 min-w-[160px]" data-testid="code-renderer-export-menu">
-                      <button
-                        onClick={exportHTML}
-                        className="w-full text-left px-3 py-2 text-sm hover:bg-muted flex items-center gap-2"
-                        data-testid="export-html"
-                      >
-                        <FileText className="w-4 h-4" />
-                        Export HTML
-                      </button>
-                      <button
-                        onClick={exportCode}
-                        className="w-full text-left px-3 py-2 text-sm hover:bg-muted flex items-center gap-2"
-                        data-testid="export-code"
-                      >
-                        <Code className="w-4 h-4" />
-                        Export Code
-                      </button>
-                      <button
-                        onClick={shareViaURL}
-                        className="w-full text-left px-3 py-2 text-sm hover:bg-muted flex items-center gap-2"
-                        data-testid="share-url"
-                      >
-                        <Share2 className="w-4 h-4" />
-                        Share URL
-                      </button>
-                    </div>
+                    {showExportMenu && (
+                      <div className="absolute top-full left-0 mt-1 bg-card border rounded-md shadow-lg z-50 min-w-[160px]" data-testid="code-renderer-export-menu">
+                        <button
+                          onClick={() => {
+                            setShowExportMenu(false);
+                            exportHTML();
+                          }}
+                          className="w-full text-left px-3 py-2 text-sm hover:bg-muted flex items-center gap-2"
+                          data-testid="export-html"
+                        >
+                          <FileText className="w-4 h-4" />
+                          Export HTML
+                        </button>
+                        <button
+                          onClick={() => {
+                            setShowExportMenu(false);
+                            exportCode();
+                          }}
+                          className="w-full text-left px-3 py-2 text-sm hover:bg-muted flex items-center gap-2"
+                          data-testid="export-code"
+                        >
+                          <Code className="w-4 h-4" />
+                          Export Code
+                        </button>
+                        <button
+                          onClick={() => {
+                            setShowExportMenu(false);
+                            shareViaURL();
+                          }}
+                          className="w-full text-left px-3 py-2 text-sm hover:bg-muted flex items-center gap-2"
+                          data-testid="share-url"
+                        >
+                          <Share2 className="w-4 h-4" />
+                          Share URL
+                        </button>
+                      </div>
+                    )}
                   </div>
                 </ExportGuard>
                 
