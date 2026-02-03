@@ -145,7 +145,9 @@ export async function exportToPDF(content: string, options: ExportOptions = {}):
   if (!html || html.trim().length === 0) {
     throw new Error('No content to export to PDF');
   }
-  
+
+  let captureIframe: HTMLIFrameElement | null = null;
+
   // Create a temporary container to render HTML
   const tempDiv = document.createElement('div');
   tempDiv.innerHTML = `
@@ -154,19 +156,21 @@ export async function exportToPDF(content: string, options: ExportOptions = {}):
     </div>
   `;
   
-  // Position off-screen but keep visible - html2canvas CANNOT capture visibility:hidden elements
-  tempDiv.style.position = 'absolute';
+  // Position in viewport so the browser lays out the element (off-screen positioning can yield zero dimensions).
+  // Invisible to the user; html2canvas clones the node and renders the clone in its own document.
+  tempDiv.style.position = 'fixed';
   tempDiv.style.top = '0';
-  tempDiv.style.left = '-10000px'; // Off-screen but still "visible"
+  tempDiv.style.left = '0';
   tempDiv.style.width = '800px';
   tempDiv.style.height = 'auto';
   tempDiv.style.background = theme === 'dark' ? '#1e1e1e' : '#fff';
   tempDiv.style.color = theme === 'dark' ? '#d4d4d4' : '#333';
-  tempDiv.style.visibility = 'visible'; // MUST be visible for html2canvas
-  tempDiv.style.opacity = '1'; // MUST be opaque for html2canvas
-  tempDiv.style.display = 'block';
+  tempDiv.style.visibility = 'visible';
+  tempDiv.style.opacity = '0';
   tempDiv.style.pointerEvents = 'none';
   tempDiv.style.zIndex = '-1';
+  tempDiv.style.display = 'block';
+  tempDiv.style.overflow = 'visible';
   
   // Apply styles
   const styleElement = document.createElement('style');
@@ -194,36 +198,37 @@ export async function exportToPDF(content: string, options: ExportOptions = {}):
     if (!contentDiv) {
       throw new Error('Failed to create PDF content container');
     }
-    
-    // Force layout recalculation by accessing offsetHeight
-    const initialHeight = contentDiv.offsetHeight;
-    const initialWidth = contentDiv.offsetWidth;
-    const textContent = contentDiv.textContent || '';
-    
-    // Check if element has been rendered (has dimensions)
-    if (initialHeight === 0 && initialWidth === 0) {
-      // Give it one more render cycle
+
+    // Force layout recalculation and retry once if dimensions are zero
+    let measuredHeight = contentDiv.scrollHeight;
+    let measuredWidth = contentDiv.offsetWidth;
+    if (measuredHeight === 0 && measuredWidth === 0) {
       await new Promise<void>((resolve) => {
         requestAnimationFrame(() => {
-          requestAnimationFrame(() => {
-            resolve();
-          });
+          requestAnimationFrame(() => resolve());
         });
       });
+      await new Promise<void>((resolve) => setTimeout(resolve, 100));
+      measuredHeight = contentDiv.scrollHeight;
+      measuredWidth = contentDiv.offsetWidth;
     }
-    
-    // Generate canvas using html2canvas directly
-    const canvas = await html2canvas(tempDiv, {
-      scale: 2,
-      useCORS: true,
-      allowTaint: false,
-      logging: false,
-      scrollY: 0,
-      scrollX: 0,
-      windowWidth: 800,
-      windowHeight: contentDiv.scrollHeight || Math.max(initialHeight, 1200),
-      backgroundColor: theme === 'dark' ? '#1e1e1e' : '#ffffff',
-      onclone: (clonedDoc: Document, element: HTMLElement) => {
+
+    // Dimension check: if still zero, try iframe fallback so export can succeed
+    let canvas: HTMLCanvasElement;
+
+    if (measuredHeight > 0 && measuredWidth > 0) {
+      // Viewport container has valid layout; capture it
+      canvas = await html2canvas(tempDiv, {
+        scale: 2,
+        useCORS: true,
+        allowTaint: false,
+        logging: false,
+        scrollY: 0,
+        scrollX: 0,
+        windowWidth: 800,
+        windowHeight: measuredHeight || 1200,
+        backgroundColor: theme === 'dark' ? '#1e1e1e' : '#ffffff',
+        onclone: (clonedDoc: Document, element: HTMLElement) => {
         // Apply styles to the cloned document FIRST, before any other operations
         const clonedStyle = clonedDoc.createElement('style');
         clonedStyle.textContent = css;
@@ -311,6 +316,55 @@ export async function exportToPDF(content: string, options: ExportOptions = {}):
         }
       }
     });
+    } else {
+      // Fallback: render in iframe so layout is computed in a real viewport
+      if (tempDiv.parentNode) {
+        document.body.removeChild(tempDiv);
+      }
+      const iframe = document.createElement('iframe');
+      captureIframe = iframe;
+      iframe.setAttribute('title', 'PDF export');
+      iframe.style.position = 'fixed';
+      iframe.style.top = '0';
+      iframe.style.left = '0';
+      iframe.style.width = '800px';
+      iframe.style.height = '10000px';
+      iframe.style.border = 'none';
+      iframe.style.opacity = '0';
+      iframe.style.pointerEvents = 'none';
+      iframe.style.zIndex = '-1';
+      document.body.appendChild(iframe);
+
+      const doc = iframe.contentDocument;
+      if (!doc) {
+        throw new Error('PDF export: iframe fallback failed (no document)');
+      }
+      const bodyBg = theme === 'dark' ? '#1e1e1e' : '#fff';
+      const bodyColor = theme === 'dark' ? '#d4d4d4' : '#333';
+      doc.open();
+      doc.write(`<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"><style>${css}</style></head><body style="margin:0;padding:0;background:${bodyBg};color:${bodyColor}"><div style="max-width:800px;margin:0 auto;padding:2rem;background:${bodyBg};color:${bodyColor}">${html}</div></body></html>`);
+      doc.close();
+
+      await new Promise<void>((resolve) => {
+        iframe.onload = () => resolve();
+        if (doc.readyState === 'complete') resolve();
+      });
+      await new Promise<void>((resolve) => setTimeout(resolve, 150));
+
+      const iframeBody = doc.body;
+      const iframeContentHeight = iframeBody.scrollHeight || 1200;
+      canvas = await html2canvas(iframeBody, {
+        scale: 2,
+        useCORS: true,
+        allowTaint: false,
+        logging: false,
+        scrollY: 0,
+        scrollX: 0,
+        windowWidth: 800,
+        windowHeight: iframeContentHeight,
+        backgroundColor: theme === 'dark' ? '#1e1e1e' : '#ffffff',
+      });
+    }
 
     // Get canvas dimensions
     const imgWidth = canvas.width;
@@ -382,9 +436,11 @@ export async function exportToPDF(content: string, options: ExportOptions = {}):
     console.error('Error exporting to PDF:', errorMessage, error);
     throw new Error(`Failed to export PDF: ${errorMessage}`);
   } finally {
-    // Clean up: remove the temporary element
     if (tempDiv.parentNode) {
       document.body.removeChild(tempDiv);
+    }
+    if (captureIframe?.parentNode) {
+      document.body.removeChild(captureIframe);
     }
   }
 }
