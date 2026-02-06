@@ -1,9 +1,7 @@
 import { useState, useMemo, useEffect } from 'react';
 import {
   Search,
-  Lightbulb,
-  CheckCircle2,
-  Sparkles,
+  Play,
   LayoutList,
   ChevronDown,
   ChevronUp,
@@ -73,16 +71,7 @@ export default function NrqlHelper() {
   const [validationMessages, setValidationMessages] = useState<ValidationMessage[]>([]);
   const [hasValidated, setHasValidated] = useState(false);
 
-  const handleExplain = () => {
-    setExplanation(explainNrql(structure));
-  };
-
-  const handleValidate = () => {
-    setValidationMessages(validateNrql(structure, query, { alertMode }));
-    setHasValidated(true);
-  };
-
-  const handleSuggestImprovements = () => {
+  const handleRender = () => {
     setValidationMessages(validateNrql(structure, query, { alertMode }));
     setExplanation(explainNrql(structure));
     setHasValidated(true);
@@ -157,17 +146,9 @@ export default function NrqlHelper() {
                   WHERE, etc.).
                 </li>
                 <li>
-                  <strong>Explain:</strong> Fills the Explanation section with plain-language
-                  descriptions of what your query does (e.g. which event type, which aggregation).
-                </li>
-                <li>
-                  <strong>Validate:</strong> Runs checks and shows errors or warnings in the
-                  Suggestions panel (e.g. missing SELECT/FROM, query length, single-quote
-                  literals).
-                </li>
-                <li>
-                  <strong>Suggest improvements:</strong> Runs both Explain and Validate so you see
-                  the full explanation and any improvement tips in one click.
+                  <strong>Render:</strong> Fills the Explanation section with a plain-language
+                  description of your query and runs validation (errors/warnings in the Suggestions
+                  panel). Click again after editing to rerun.
                 </li>
                 <li>
                   <strong>Templates:</strong> Opens a list of starter queries. Click one to insert
@@ -262,36 +243,13 @@ export default function NrqlHelper() {
               <div className="flex flex-wrap items-center gap-2">
                 <Button
                   type="button"
-                  variant="outline"
                   size="sm"
-                  onClick={handleExplain}
-                  className="gap-1.5"
-                  title="Show plain-language explanation of what your query does"
+                  onClick={handleRender}
+                  className="gap-1.5 min-w-[90px]"
+                  title="Run Explain & Validate (rerun after editing)"
                 >
-                  <Lightbulb className="w-4 h-4" />
-                  Explain
-                </Button>
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  onClick={handleValidate}
-                  className="gap-1.5"
-                  title="Check for errors and warnings (e.g. missing clauses, query length, string quotes)"
-                >
-                  <CheckCircle2 className="w-4 h-4" />
-                  Validate
-                </Button>
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  onClick={handleSuggestImprovements}
-                  className="gap-1.5"
-                  title="Run both Explain and Validate to see full explanation and improvement tips"
-                >
-                  <Sparkles className="w-4 h-4" />
-                  Suggest improvements
+                  <Play className="w-4 h-4" />
+                  Render
                 </Button>
                 <Button
                   type="button"
@@ -399,7 +357,7 @@ export default function NrqlHelper() {
                   </ul>
                 ) : (
                   <p className="text-sm text-muted-foreground">
-                    Click &quot;Explain&quot; or &quot;Suggest improvements&quot; to generate an explanation.
+                    Click &quot;Render&quot; to generate an explanation.
                   </p>
                 )}
               </div>
@@ -441,7 +399,7 @@ export default function NrqlHelper() {
                 </p>
               ) : (
                 <p className="text-sm text-muted-foreground">
-                  Click &quot;Validate&quot; or &quot;Suggest improvements&quot; to check for issues.
+                  Click &quot;Render&quot; to check for issues.
                 </p>
               )}
             </CardContent>
